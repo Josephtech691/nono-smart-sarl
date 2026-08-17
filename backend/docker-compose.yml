@@ -1,0 +1,17 @@
+# Base de données Postgres locale pour le developpement.
+# Usage : docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nono
+      POSTGRES_PASSWORD: nono
+      POSTGRES_DB: nono_smart
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

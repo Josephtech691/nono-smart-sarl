@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-paper text-ink font-body antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display text-ink;
+  }
+  :focus-visible {
+    outline: 2px solid theme('colors.brand.600');
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-6 py-3
+           font-display font-semibold text-white transition hover:bg-brand-700
+           focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
+           focus-visible:outline-brand-700 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border-2 border-pine-900
+           bg-transparent px-6 py-3 font-display font-semibold text-pine-900 transition
+           hover:bg-pine-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .btn-outline-white {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border-2 border-white/80
+           bg-transparent px-6 py-3 font-display font-semibold text-white transition
+           hover:bg-white hover:text-pine-900;
+  }
+  .card {
+    @apply rounded-xl2 border border-line bg-white shadow-card;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-white px-4 py-2.5 text-ink placeholder:text-ink/40
+           focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink/80;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+}
+
+/* Ondulation "signature" utilisee en base du Hero (motif du bassin) */
+.wave-divider {
+  display: block;
+  width: 100%;
+  height: auto;
+  line-height: 0;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-toast-in {
+  animation: toast-in 0.22s ease-out;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.5s ease-out both;
+}
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #E1E6E0 25%, #EDF0EC 37%, #E1E6E0 63%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Marqueur Leaflet aux couleurs de la marque (voir components/MapView.jsx) */
+.brand-pin {
+  filter: drop-shadow(0 2px 3px rgba(15, 61, 44, 0.35));
+}
+.leaflet-container {
+  font-family: 'Inter', sans-serif;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 0.75rem;
+}

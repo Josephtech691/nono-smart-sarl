@@ -1,0 +1,49 @@
+# Blueprint Render - deploiement en un clic de l'API + base Postgres.
+# Dans le dashboard Render : New > Blueprint > pointer sur ce repo (dossier backend/ comme rootDir si le repo contient aussi le frontend).
+# Doc : https://render.com/docs/blueprint-spec
+#
+# NB : la base Postgres "free" de Render expire 30 jours apres creation
+# (14 jours de grace ensuite). Pratique pour la demo/les tests, mais pour la
+# production il faudra passer sur un plan payant avant l'expiration.
+
+databases:
+  - name: nono-smart-db
+    databaseName: nono_smart
+    plan: free
+
+services:
+  - type: web
+    name: nono-smart-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nono-smart-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: FRONTEND_URL
+        sync: false
+      - key: MTN_MOMO_API_URL
+        sync: false
+      - key: MTN_MOMO_API_KEY
+        sync: false
+      - key: MTN_MOMO_API_SECRET
+        sync: false
+      - key: MTN_MOMO_SUBSCRIPTION_KEY
+        sync: false
+      - key: ORANGE_MONEY_API_URL
+        sync: false
+      - key: ORANGE_MONEY_API_KEY
+        sync: false
+      - key: ORANGE_MONEY_API_SECRET
+        sync: false

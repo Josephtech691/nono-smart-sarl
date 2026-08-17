@@ -1,0 +1,578 @@
+// Schema Prisma - Plateforme e-commerce silures & alevins (NONO SMART SARL)
+// Toutes les sommes d'argent sont stockees en FCFA (entier, pas de centimes).
+// Les quantites (kg, unites) sont stockees en Float pour supporter les poids type 2.5 kg.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------------------------
+
+enum Role {
+  CUSTOMER
+  ADMIN
+  DRIVER
+}
+
+enum ProductUnit {
+  GRAM
+  KILOGRAM
+  PIECE
+  LOT
+  UNIT_50
+  UNIT_100
+  UNIT_500
+  UNIT_1000
+  CUSTOM
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  ASSIGNED
+  PICKED_UP
+  ON_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  MTN_MOMO
+  ORANGE_MONEY
+  CASH
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum DriverStatus {
+  AVAILABLE
+  BUSY
+  OFFLINE
+  SUSPENDED
+}
+
+enum DeliveryStatus {
+  PENDING
+  ASSIGNED
+  PICKED_UP
+  ON_ROUTE
+  DELIVERED
+  FAILED
+}
+
+enum StockMovementType {
+  IN
+  OUT
+  RESERVED
+  RELEASED
+  ADJUSTMENT
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED
+}
+
+enum NotificationAudience {
+  CUSTOMER
+  ADMIN
+  DRIVER
+}
+
+enum CustomerType {
+  PARTICULIER
+  PROFESSIONNEL
+}
+
+enum ProfessionalStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RecurringFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+}
+
+// ---------------------------------------------------------------------------
+// UTILISATEURS
+// ---------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(uuid())
+  firstName String
+  lastName  String
+  phone     String   @unique
+  email     String?  @unique
+  password  String
+  role      Role     @default(CUSTOMER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customerProfile CustomerProfile?
+  driverProfile   DriverProfile?
+  notifications   Notification[]
+
+  @@map("users")
+}
+
+model CustomerProfile {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loyaltyPoints Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  // Clients professionnels / tarifs grossistes (section 47, 75)
+  customerType             CustomerType       @default(PARTICULIER)
+  businessName             String?
+  taxId                    String?
+  professionalStatus       ProfessionalStatus @default(NONE)
+  wholesaleDiscountPercent Int                @default(0)
+
+  // Programme de parrainage (section 77 - implemente en bonus)
+  referralCode String  @unique
+  referredById String?
+  referredBy   CustomerProfile?  @relation("Referrals", fields: [referredById], references: [id])
+  referrals    CustomerProfile[] @relation("Referrals")
+
+  addresses       Address[]
+  orders          Order[]
+  favorites       Favorite[]
+  reviews         Review[]
+  carts           Cart[]
+  recurringOrders RecurringOrder[]
+
+  @@map("customer_profiles")
+}
+
+model DriverProfile {
+  id        String       @id @default(uuid())
+  userId    String       @unique
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    DriverStatus @default(OFFLINE)
+  vehicle   String?
+  createdAt DateTime     @default(now())
+
+  // Suivi temps reel (section 75 "suivi livreur")
+  lastLatitude   Float?
+  lastLongitude  Float?
+  lastLocationAt DateTime?
+
+  deliveries Delivery[]
+
+  @@map("driver_profiles")
+}
+
+// ---------------------------------------------------------------------------
+// CATALOGUE
+// ---------------------------------------------------------------------------
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id               String   @id @default(uuid())
+  name             String
+  slug             String   @unique
+  description      String?
+  price            Int // prix de base ("a partir de"), en FCFA
+  costPrice        Int      @default(0) // cout d'achat, pour le calcul de marge (statistiques avancees)
+  unit             ProductUnit @default(KILOGRAM)
+  categoryId       String
+  category         Category @relation(fields: [categoryId], references: [id])
+  stockQuantity    Float    @default(0)
+  reservedQuantity Float    @default(0)
+  alertThreshold   Float    @default(0)
+  minOrderQuantity Float    @default(1)
+  isActive         Boolean  @default(true)
+  isFeatured       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  images         ProductImage[]
+  priceTiers     ProductPriceTier[]
+  stockMovements StockMovement[]
+  orderItems     OrderItem[]
+  favorites      Favorite[]
+  reviews        Review[]
+  cartItems      CartItem[]
+
+  @@map("products")
+}
+
+// Prix degressif selon la quantite (section 8, 27, 28 du cahier des charges)
+// Exemple alevins : 100 -> prixA, 500 -> prixB, 1000 -> prixC, 5000 -> prixD
+model ProductPriceTier {
+  id          String  @id @default(uuid())
+  productId   String
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQuantity Float
+  unitPrice   Int
+
+  @@map("product_price_tiers")
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  altText   String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@map("product_images")
+}
+
+model StockMovement {
+  id        String            @id @default(uuid())
+  productId String
+  product   Product           @relation(fields: [productId], references: [id])
+  type      StockMovementType
+  quantity  Float
+  reason    String?
+  createdAt DateTime          @default(now())
+
+  @@map("stock_movements")
+}
+
+// ---------------------------------------------------------------------------
+// PANIER (persiste pour un client connecte - le MVP utilise surtout un panier
+// cote client/localStorage, ce modele sert de base pour la synchronisation
+// multi-appareils en Phase 2)
+// ---------------------------------------------------------------------------
+
+model Cart {
+  id         String           @id @default(uuid())
+  customerId String
+  customer   CustomerProfile  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items      CartItem[]
+  updatedAt  DateTime         @updatedAt
+  createdAt  DateTime         @default(now())
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String  @id @default(uuid())
+  cartId    String
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Float
+
+  @@map("cart_items")
+}
+
+// ---------------------------------------------------------------------------
+// ADRESSES & ZONES DE LIVRAISON
+// ---------------------------------------------------------------------------
+
+model Address {
+  id           String           @id @default(uuid())
+  customerId   String?
+  customer     CustomerProfile? @relation(fields: [customerId], references: [id])
+  fullName     String
+  phone        String
+  region       String           @default("Centre")
+  city         String           @default("Yaounde")
+  district     String
+  landmark     String?
+  instructions String?
+  latitude     Float?
+  longitude    Float?
+  isDefault    Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+
+  orders Order[]
+  recurringOrders RecurringOrder[]
+
+  @@map("addresses")
+}
+
+model DeliveryZone {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  fee       Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  orders Order[]
+  recurringOrders RecurringOrder[]
+
+  @@map("delivery_zones")
+}
+
+// ---------------------------------------------------------------------------
+// COMMANDES
+// ---------------------------------------------------------------------------
+
+model Order {
+  id             String        @id @default(uuid())
+  orderNumber    String        @unique
+  customerId     String?
+  customer       CustomerProfile? @relation(fields: [customerId], references: [id])
+  guestName      String?
+  guestPhone     String?
+  addressId      String?
+  address        Address?      @relation(fields: [addressId], references: [id])
+  deliveryZoneId String?
+  deliveryZone   DeliveryZone? @relation(fields: [deliveryZoneId], references: [id])
+  couponId       String?
+  coupon         Coupon?       @relation(fields: [couponId], references: [id])
+  originRecurringOrderId String?
+  originRecurringOrder   RecurringOrder? @relation(fields: [originRecurringOrderId], references: [id])
+
+  subtotal    Int
+  deliveryFee Int         @default(0)
+  discount    Int         @default(0)
+  total       Int
+  status      OrderStatus @default(PENDING)
+  scheduledAt DateTime?
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+  payment       Payment?
+  delivery      Delivery?
+  invoice       Invoice?
+  review        Review?
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  name      String
+  unitPrice Int
+  quantity  Float
+  total     Int
+
+  @@map("order_items")
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@map("order_status_history")
+}
+
+// ---------------------------------------------------------------------------
+// LIVRAISON
+// ---------------------------------------------------------------------------
+
+model Delivery {
+  id               String         @id @default(uuid())
+  orderId          String         @unique
+  order            Order          @relation(fields: [orderId], references: [id])
+  driverId         String?
+  driver           DriverProfile? @relation(fields: [driverId], references: [id])
+  status           DeliveryStatus @default(PENDING)
+  confirmationCode String
+  cashExpected     Int?
+  cashReceived     Int?
+  assignedAt       DateTime?
+  pickedUpAt       DateTime?
+  deliveredAt      DateTime?
+  createdAt        DateTime       @default(now())
+
+  @@map("deliveries")
+}
+
+// ---------------------------------------------------------------------------
+// COMMANDES RECURRENTES (section 75 - abonnement simple, pas de facturation
+// automatique tierce : cree une vraie Order a chaque echeance)
+// ---------------------------------------------------------------------------
+
+model RecurringOrder {
+  id             String             @id @default(uuid())
+  customerId     String
+  customer       CustomerProfile    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label          String? // ex: "Commande habituelle" (section 48)
+  items          Json // [{ productId, quantity }]
+  addressId      String
+  address        Address            @relation(fields: [addressId], references: [id])
+  deliveryZoneId String
+  deliveryZone   DeliveryZone       @relation(fields: [deliveryZoneId], references: [id])
+  paymentMethod  PaymentMethod
+  frequency      RecurringFrequency
+  nextRunAt      DateTime
+  lastRunAt      DateTime?
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+
+  generatedOrders Order[]
+
+  @@map("recurring_orders")
+}
+
+// ---------------------------------------------------------------------------
+// PAIEMENTS
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id             String        @id @default(uuid())
+  orderId        String        @unique
+  order          Order         @relation(fields: [orderId], references: [id])
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  amount         Int
+  phoneNumber    String?
+  transactionRef String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  transactions PaymentTransaction[]
+
+  @@map("payments")
+}
+
+model PaymentTransaction {
+  id          String   @id @default(uuid())
+  paymentId   String
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  provider    String
+  status      String
+  rawResponse Json?
+  createdAt   DateTime @default(now())
+
+  @@map("payment_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// PROMOTIONS
+// ---------------------------------------------------------------------------
+
+model Coupon {
+  id              String     @id @default(uuid())
+  code            String     @unique
+  type            CouponType
+  value           Int // pourcentage (0-100) ou montant fixe en FCFA selon "type"
+  minOrderAmount  Int        @default(0)
+  isActive        Boolean    @default(true)
+  expiresAt       DateTime?
+  usageLimit      Int?
+  usageCount      Int        @default(0)
+  createdAt       DateTime   @default(now())
+
+  orders Order[]
+
+  @@map("coupons")
+}
+
+// ---------------------------------------------------------------------------
+// AVIS, FAVORIS, NOTIFICATIONS
+// ---------------------------------------------------------------------------
+
+model Review {
+  id         String          @id @default(uuid())
+  orderId    String          @unique
+  order      Order           @relation(fields: [orderId], references: [id])
+  customerId String
+  customer   CustomerProfile @relation(fields: [customerId], references: [id])
+  productId  String?
+  product    Product?        @relation(fields: [productId], references: [id])
+  quality    Int
+  delivery   Int
+  service    Int
+  comment    String?
+  isVisible  Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+
+  @@map("reviews")
+}
+
+model Favorite {
+  id         String          @id @default(uuid())
+  customerId String
+  customer   CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt  DateTime        @default(now())
+
+  @@unique([customerId, productId])
+  @@map("favorites")
+}
+
+model Notification {
+  id        String               @id @default(uuid())
+  userId    String?
+  user      User?                @relation(fields: [userId], references: [id])
+  audience  NotificationAudience
+  title     String
+  message   String
+  isRead    Boolean              @default(false)
+  link      String?
+  createdAt DateTime             @default(now())
+
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// FINANCES (admin)
+// ---------------------------------------------------------------------------
+
+model Expense {
+  id          String   @id @default(uuid())
+  category    String // achat_poisson, transport, carburant, salaires, emballages, autre
+  label       String
+  amount      Int
+  incurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@map("expenses")
+}
+
+model Invoice {
+  id            String   @id @default(uuid())
+  orderId       String   @unique
+  order         Order    @relation(fields: [orderId], references: [id])
+  invoiceNumber String   @unique
+  createdAt     DateTime @default(now())
+
+  @@map("invoices")
+}

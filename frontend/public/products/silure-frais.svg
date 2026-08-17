@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <rect width="400" height="300" fill="#F0F3F0"/>
+  <g transform="translate(45,70)">
+    <path d="M0 90 C40 20 140 0 230 30 C270 44 300 70 310 90 C300 110 270 136 230 150 C140 180 40 160 0 90 Z" fill="#155039"/>
+    <path d="M0 90 C40 20 140 0 230 30 C216 55 210 75 210 90 C210 105 216 125 230 150 C140 180 40 160 0 90 Z" fill="#1D6B4C"/>
+    <path d="M300 78 L340 55 L332 90 L340 125 L300 102 Z" fill="#155039"/>
+    <circle cx="248" cy="70" r="7" fill="#F0F3F0"/>
+    <circle cx="248" cy="70" r="3.5" fill="#0A2A1D"/>
+    <path d="M296 92 C320 92 338 100 350 108" stroke="#0A2A1D" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M296 96 C316 100 332 112 342 122" stroke="#0A2A1D" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M60 130 C90 158 140 168 180 160" stroke="#0A2A1D" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.25"/>
+  </g>
+  <text x="200" y="255" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#237F59" opacity="0.7">Silure frais</text>
+</svg>
