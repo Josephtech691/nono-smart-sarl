@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
-import { Fish, LogIn } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
 export default function AdminLogin() {
@@ -32,7 +32,7 @@ export default function AdminLogin() {
     <div className="flex min-h-screen items-center justify-center bg-pine-950 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center text-white">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-600"><Fish size={22} /></span>
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white p-2"><img src="/brand/logo-icon-raw.png" alt="" className="h-full w-full object-contain" /></span>
           <h1 className="mt-3 font-display text-xl font-bold">Administration</h1>
           <p className="text-sm text-white/40">NONO SMART SARL</p>
         </div>

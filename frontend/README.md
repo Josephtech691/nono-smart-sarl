@@ -55,15 +55,16 @@ Une fois le backend seedé (`npm run seed` côté backend), vous pouvez tester :
 ## 4. Identité visuelle
 
 Les couleurs, la typographie (Sora / Inter) et le ton général reprennent la
-maquette fournie (vert forêt, blanc, badges arrondis), avec quelques ajouts :
-illustration de héros originale (silure + ondulations), icônes de carte aux
-couleurs de la marque, graphiques (recharts) et notifications toast animées.
-Les visuels des deux produits de démonstration (`public/products/*.svg`) sont
-des illustrations originales créées pour ce projet — les photos que vous avez
-fournies en référence semblaient en grande partie glanées sur le web (miniatures
-YouTube, images Google Images) plutôt que votre propre photographie produit ;
-pour rester tranquille côté droits d'auteur, remplacez ces illustrations par
-vos propres photos depuis **Admin > Produits > Images** dès que possible.
+maquette fournie (vert forêt, blanc, badges arrondis). Le logo (`public/brand/`),
+le favicon, les icônes PWA (`public/icons/`) et les photos produits
+(`public/products/`) sont **vos propres visuels** — logo et photos que vous
+avez fournis, pas des illustrations générées. Le composant `ProductDetail`
+affiche une petite galerie si un produit a plusieurs photos (voir
+`prisma/seed.js` pour l'exemple avec 3 photos par produit). Si vous n'avez
+pas les droits de réutilisation sur certaines de ces images (par exemple si
+elles viennent d'ailleurs que votre propre exploitation), pensez à les
+remplacer par vos propres prises de vue avant une mise en ligne commerciale —
+ça reste ajustable à tout moment depuis **Admin > Produits > Images**.
 
 ## 5. Fonctionnalités Phase 2 / Phase 3 (toutes implémentées côté frontend)
 

@@ -24,10 +24,13 @@ export default function ProductDetail() {
   const [added, setAdded] = useState(false);
   const [error, setError] = useState('');
   const [imgFailed, setImgFailed] = useState(false);
+  const [activeImage, setActiveImage] = useState(0);
   const [recommendations, setRecommendations] = useState([]);
 
   useEffect(() => {
     setProduct(null);
+    setActiveImage(0);
+    setImgFailed(false);
     productsApi.get(slug).then((p) => {
       setProduct(p);
       setQuantity(p.minOrderQuantity || 1);
@@ -72,17 +75,35 @@ export default function ProductDetail() {
     }
   };
 
-  const image = product.images?.[0]?.url;
+  const images = product.images || [];
+  const image = images[activeImage]?.url;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
       <div className="grid gap-10 md:grid-cols-2">
-        <div className="aspect-square overflow-hidden rounded-xl2 bg-mist">
-          {image && !imgFailed ? (
-            <img src={image} alt={product.name} onError={() => setImgFailed(true)} className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-pine-700/30">
-              <Fish size={90} strokeWidth={1} />
+        <div>
+          <div className="aspect-square overflow-hidden rounded-xl2 bg-mist">
+            {image && !imgFailed ? (
+              <img src={image} alt={product.name} onError={() => setImgFailed(true)} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-pine-700/30">
+                <Fish size={90} strokeWidth={1} />
+              </div>
+            )}
+          </div>
+          {images.length > 1 && (
+            <div className="mt-3 flex gap-2">
+              {images.map((img, i) => (
+                <button
+                  key={img.id}
+                  onClick={() => { setActiveImage(i); setImgFailed(false); }}
+                  className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition ${
+                    activeImage === i ? 'border-brand-600' : 'border-transparent opacity-70 hover:opacity-100'
+                  }`}
+                >
+                  <img src={img.url} alt="" className="h-full w-full object-cover" />
+                </button>
+              ))}
             </div>
           )}
         </div>

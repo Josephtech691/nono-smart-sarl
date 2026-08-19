@@ -26,6 +26,7 @@ export default function Register() {
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-12 sm:px-6">
+      <img src="/brand/logo-full.png" alt="NONO SMART SARL" className="mx-auto h-36 w-auto" />
       <h1 className="text-center text-2xl font-bold">Créer un compte</h1>
       <p className="mt-1 text-center text-ink/60">Suivez vos commandes et gagnez des points de fidélité.</p>
 

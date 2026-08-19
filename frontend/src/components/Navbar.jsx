@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Fish, ShoppingCart, Menu, X, User, LogOut } from 'lucide-react';
+import { ShoppingCart, Menu, X, User, LogOut } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { useCartStore } from '../store/cartStore';
 
@@ -26,9 +26,7 @@ export default function Navbar() {
     <header className="sticky top-0 z-30 border-b border-line bg-paper/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <Link to="/" className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-pine-900 text-white">
-            <Fish size={18} />
-          </span>
+          <img src="/brand/logo-icon-raw.png" alt="NONO SMART SARL" className="h-11 w-auto" />
           <span className="font-display leading-none">
             <span className="block text-base font-extrabold tracking-tight text-ink">
               NONO <span className="text-brand-600">SMART</span>

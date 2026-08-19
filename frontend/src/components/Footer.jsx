@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Fish, Phone, MapPin, MessageCircle } from 'lucide-react';
+import { Phone, MapPin, MessageCircle } from 'lucide-react';
 import {
   COMPANY_NAME,
   COMPANY_SUBTAGLINE,
@@ -14,8 +14,8 @@ export default function Footer() {
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
-              <Fish size={18} />
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white p-1">
+              <img src="/brand/logo-icon-raw.png" alt="" className="h-full w-full object-contain" />
             </span>
             <span className="font-display text-lg font-bold text-white">{COMPANY_NAME}</span>
           </div>

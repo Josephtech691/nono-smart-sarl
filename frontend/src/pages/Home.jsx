@@ -73,42 +73,18 @@ export default function Home() {
             </div>
           </div>
           <div className="relative mx-auto aspect-square w-full max-w-sm md:max-w-md">
-            {/* Illustration originale : silure nageant dans des ondulations concentriques */}
-            <svg viewBox="0 0 400 400" className="h-full w-full">
+            {/* Ondulations decoratives derriere la vraie photo */}
+            <svg viewBox="0 0 400 400" className="absolute inset-0 h-full w-full">
               <circle cx="200" cy="200" r="190" fill="white" fillOpacity="0.04" />
               <circle cx="200" cy="200" r="150" fill="none" stroke="white" strokeOpacity="0.1" />
-              <circle cx="200" cy="200" r="110" fill="none" stroke="white" strokeOpacity="0.14" />
-              <circle cx="200" cy="200" r="70" fill="white" fillOpacity="0.06" />
-
               <circle cx="90" cy="110" r="5" fill="#33B56C" fillOpacity="0.5" />
               <circle cx="320" cy="90" r="3.5" fill="#33B56C" fillOpacity="0.4" />
               <circle cx="330" cy="290" r="6" fill="#33B56C" fillOpacity="0.35" />
               <circle cx="70" cy="300" r="4" fill="#33B56C" fillOpacity="0.4" />
-
-              <g transform="translate(105,150) rotate(-6)">
-                <path
-                  d="M0 55C25 8 100 -5 165 20 C195 31 218 48 228 55 C218 62 195 79 165 90 C100 115 25 102 0 55Z"
-                  fill="#33B56C"
-                />
-                <path
-                  d="M0 55C25 8 100 -5 165 20 C150 36 143 48 143 55 C143 62 150 74 165 90 C100 115 25 102 0 55Z"
-                  fill="#279C5A"
-                />
-                <path d="M222 47L262 22L250 55L262 88L222 63Z" fill="#33B56C" />
-                <circle cx="186" cy="42" r="6.5" fill="#0A2A1D" />
-                <path d="M220 58C244 60 264 70 278 82" stroke="#0A2A1D" strokeWidth="4" fill="none" strokeLinecap="round" />
-                <path d="M220 64C238 72 254 84 266 98" stroke="#0A2A1D" strokeWidth="4" fill="none" strokeLinecap="round" />
-              </g>
-
-              <path
-                d="M60 300C110 320 160 320 200 300C240 280 290 280 340 300"
-                stroke="white"
-                strokeOpacity="0.15"
-                strokeWidth="3"
-                fill="none"
-                strokeLinecap="round"
-              />
             </svg>
+            <div className="absolute inset-[12%] overflow-hidden rounded-full border-4 border-white/10 shadow-2xl">
+              <img src="/products/hero-silure.jpg" alt="Silures frais NONO SMART" className="h-full w-full object-cover" />
+            </div>
           </div>
         </div>
 

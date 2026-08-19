@@ -63,7 +63,13 @@ async function main() {
       alertThreshold: 15,
       minOrderQuantity: 1,
       isFeatured: true,
-      images: { create: [{ url: '/products/silure-frais.svg', altText: 'Silure frais', position: 0 }] },
+      images: {
+        create: [
+          { url: '/products/silure-1.jpg', altText: 'Silure frais', position: 0 },
+          { url: '/products/silure-2.jpg', altText: 'Silures frais en bassin', position: 1 },
+          { url: '/products/silure-3.jpg', altText: 'Silure frais gros plan', position: 2 },
+        ],
+      },
       priceTiers: {
         create: [
           { minQuantity: 1, unitPrice: 2500 },
@@ -88,7 +94,13 @@ async function main() {
       alertThreshold: 500,
       minOrderQuantity: 50,
       isFeatured: true,
-      images: { create: [{ url: '/products/alevins.svg', altText: 'Alevins de silure', position: 0 }] },
+      images: {
+        create: [
+          { url: '/products/alevins-1.jpg', altText: 'Alevins de silure dans les mains', position: 0 },
+          { url: '/products/alevins-2.jpg', altText: 'Alevins de silure en bassine', position: 1 },
+          { url: '/products/alevins-3.jpg', altText: 'Alevins de silure en bassin', position: 2 },
+        ],
+      },
       priceTiers: {
         create: [
           { minQuantity: 100, unitPrice: 100 },

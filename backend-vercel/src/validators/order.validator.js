@@ -1,0 +1,52 @@
+const { z } = require('zod');
+
+const addressInputSchema = z.object({
+  fullName: z.string().min(2),
+  phone: z.string().min(8),
+  region: z.string().optional(),
+  city: z.string().optional(),
+  district: z.string().min(2, 'Le quartier est requis'),
+  landmark: z.string().optional(),
+  instructions: z.string().optional(),
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable(),
+  saveAddress: z.boolean().optional(),
+});
+
+const createOrderSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        productId: z.string().min(1),
+        quantity: z.number().positive('La quantite doit etre superieure a 0'),
+      })
+    )
+    .min(1, 'Le panier est vide'),
+  guestName: z.string().optional(),
+  guestPhone: z.string().optional(),
+  addressId: z.string().optional(),
+  newAddress: addressInputSchema.optional(),
+  deliveryZoneId: z.string().min(1, 'La zone de livraison est requise'),
+  paymentMethod: z.enum(['MTN_MOMO', 'ORANGE_MONEY', 'CASH']),
+  paymentPhoneNumber: z.string().optional(),
+  couponCode: z.string().optional(),
+  scheduledAt: z.string().datetime().optional().nullable(),
+  notes: z.string().optional(),
+});
+
+const updateStatusSchema = z.object({
+  status: z.enum([
+    'PENDING',
+    'CONFIRMED',
+    'PREPARING',
+    'READY',
+    'ASSIGNED',
+    'PICKED_UP',
+    'ON_DELIVERY',
+    'DELIVERED',
+    'CANCELLED',
+  ]),
+  note: z.string().optional(),
+});
+
+module.exports = { addressInputSchema, createOrderSchema, updateStatusSchema };

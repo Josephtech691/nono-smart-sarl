@@ -13,7 +13,6 @@ import {
   Menu,
   X,
   LogOut,
-  Fish,
   Users,
   LineChart,
 } from 'lucide-react';
@@ -47,8 +46,8 @@ export default function AdminLayout() {
   const SidebarContent = (
     <>
       <div className="flex items-center gap-2 px-5 py-5">
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-600 text-white">
-          <Fish size={18} />
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white p-1">
+          <img src="/brand/logo-icon-raw.png" alt="" className="h-full w-full object-contain" />
         </span>
         <div className="leading-none">
           <p className="font-display text-sm font-bold text-white">NONO SMART</p>
