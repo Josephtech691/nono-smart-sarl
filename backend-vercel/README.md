@@ -59,19 +59,33 @@ et `DIRECT_URL` en dernier recours.
 
 ## 2. Déploiement sur Vercel
 
+> ⚠️ **Étape obligatoire avant que l'API fonctionne : générer la migration
+> initiale.** Le script `vercel-build` lance `prisma migrate deploy`, qui
+> **applique** des migrations existantes mais n'en **génère** jamais. Aucune
+> migration n'est fournie dans ce dépôt (impossible à générer sans être
+> connecté à une vraie base de données). Sans l'étape 7 ci-dessous, la base
+> reste vide et l'API renvoie des erreurs `The table ... does not exist`.
+
 1. Poussez ce repo sur GitHub (dossier `backend-vercel/` à la racine, ou seul repo).
 2. Sur [vercel.com](https://vercel.com) : **Add New > Project**, importez le repo.
 3. **Root Directory** : `backend-vercel` (si le repo contient aussi le frontend).
 4. **Framework Preset** : Vercel détecte Express automatiquement — rien à changer.
 5. Ajoutez les variables d'environnement (Project Settings > Environment
    Variables) : au minimum `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`,
-   `FRONTEND_URL`, `CRON_SECRET`. Copiez le reste de `.env.example` selon vos besoins.
+   `FRONTEND_URL` (URL Vercel exacte du frontend, sans slash final), `CRON_SECRET`.
+   Copiez le reste de `.env.example` selon vos besoins.
 6. Déployez. Le script `vercel-build` (`prisma generate && prisma migrate
-   deploy`) s'exécute automatiquement à chaque déploiement — vos migrations
-   sont donc appliquées sans étape manuelle.
-7. Une fois déployé, lancez le seed une fois via `vercel env pull .env.local`
-   puis `npm run seed` en local (pointé sur la base de production), ou
-   adaptez la commande selon votre préférence.
+   deploy`) s'exécute à chaque déploiement, mais n'a rien à appliquer tant que
+   l'étape 7 n'a pas été faite au moins une fois.
+7. **Sur votre ordinateur**, dans `backend-vercel`, avec `DATABASE_URL` /
+   `DIRECT_URL` de `.env` pointés vers votre base Neon/Supabase de production :
+   ```bash
+   npm install
+   npx prisma migrate dev --name init   # cree ET applique les tables
+   npm run seed                          # categories/produits/zones/comptes demo
+   ```
+   Committez et poussez le dossier `prisma/migrations/` généré — les
+   déploiements suivants l'appliqueront automatiquement via `vercel-build`.
 
 Votre API est disponible sur `https://<votre-projet>.vercel.app/api/...`.
 Vérifiez avec `GET /api/health`.

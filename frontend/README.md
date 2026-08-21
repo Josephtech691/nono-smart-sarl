@@ -35,12 +35,15 @@ L'application est disponible sur `http://localhost:5173`.
 2. Sur [vercel.com](https://vercel.com) : **Add New > Project**, sélectionnez le repo.
 3. **Root Directory** : `frontend`
 4. Vercel détecte automatiquement Vite (`npm run build`, dossier `dist`) — aucune
-   configuration supplémentaire n'est nécessaire.
+   configuration supplémentaire n'est nécessaire. `vercel.json` (déjà fourni)
+   ajoute juste la redirection SPA nécessaire pour que l'actualisation ou
+   l'accès direct à une URL comme `/produits` ou `/compte/commandes` fonctionne.
 5. Ajoutez la variable d'environnement `VITE_API_URL` = URL de votre API Render,
    par exemple `https://nono-smart-api.onrender.com/api`.
-6. Déployez. Une fois l'URL Vercel connue, reportez-la dans la variable
-   `FRONTEND_URL` du backend sur Render (sinon les requêtes seront bloquées par
-   CORS).
+6. Déployez. Une fois l'URL Vercel connue (ex : `https://nono-smart-sarl.vercel.app`,
+   **sans slash final**), reportez-la **exactement** dans la variable `FRONTEND_URL`
+   du backend sur Render, puis redéployez le backend — sinon les requêtes seront
+   bloquées par CORS (voir `backend/README.md` section dépannage).
 
 ## 3. Comptes de démonstration
 

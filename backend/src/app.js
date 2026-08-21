@@ -17,15 +17,22 @@ app.use(helmet());
 
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
   .split(',')
-  .map((s) => s.trim())
+  .map((s) => s.trim().replace(/\/+$/, '')) // retire un slash final eventuel (source frequente de mismatch)
   .filter(Boolean);
 
 app.use(
   cors({
     origin(origin, callback) {
-      // Pas d'origine (ex: appel serveur-a-serveur, Postman) -> autorise
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error('Non autorise par la politique CORS'));
+      // Pas d'origine (ex: appel serveur-a-serveur, Postman, health check) -> autorise
+      if (!origin) return callback(null, true);
+      const normalized = origin.replace(/\/+$/, '');
+      if (allowedOrigins.includes(normalized)) return callback(null, true);
+      console.warn(
+        `[cors] Origine refusee : "${origin}" - autorisee(s) : ${allowedOrigins.join(', ') || '(aucune - FRONTEND_URL non defini ?)'}`
+      );
+      const err = new Error('Non autorise par la politique CORS');
+      err.statusCode = 403;
+      return callback(err);
     },
   })
 );

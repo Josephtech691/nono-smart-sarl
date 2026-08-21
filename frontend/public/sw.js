@@ -33,17 +33,26 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return;
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const network = fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
+    caches.match(request).then(async (cached) => {
+      try {
+        const response = await fetch(request);
+        if (response && response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        }
+        return response;
+      } catch (err) {
+        // Reseau indisponible : on sert le cache si on en a un, sinon la
+        // page d'accueil en cache (utile pour une navigation SPA hors-ligne),
+        // et en tout dernier recours une reponse d'erreur explicite -
+        // jamais `undefined`, qui ferait planter respondWith().
+        if (cached) return cached;
+        if (request.mode === 'navigate') {
+          const shell = await caches.match('/');
+          if (shell) return shell;
+        }
+        return new Response('Hors ligne', { status: 503, statusText: 'Service Unavailable' });
+      }
     })
   );
 });

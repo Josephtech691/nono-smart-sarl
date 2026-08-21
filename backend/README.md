@@ -52,7 +52,16 @@ L'API écoute sur `http://localhost:4000`. Vérifiez avec `GET /api/health`.
 
 ## 2. Déploiement sur Render
 
-Deux options :
+> ⚠️ **Étape obligatoire avant que le site fonctionne : générer la migration
+> initiale.** `npx prisma migrate deploy` (utilisé au build par Render)
+> **applique** des migrations existantes, il n'en **génère** jamais. Comme
+> aucune migration n'est fournie dans ce dépôt (elle doit être générée contre
+> une vraie base de données, ce qui n'est possible qu'une fois connecté à
+> votre Postgres), la première fois vous obtiendrez une base vide et des
+> erreurs `The table 'public.products' does not exist`. Voir l'étape 3
+> ci-dessous immédiatement après avoir créé le service.
+
+Deux options pour déployer :
 
 ### Option A — Blueprint (`render.yaml`, recommandé)
 
@@ -61,7 +70,7 @@ Deux options :
    `backend/render.yaml` et crée automatiquement le service web et la base Postgres.
 3. Render vous demandera de renseigner les variables marquées `sync: false`
    (`FRONTEND_URL`, clés MTN/Orange) — `FRONTEND_URL` doit être l'URL Vercel du frontend
-   (ex: `https://nono-smart.vercel.app`).
+   **exacte**, sans slash final (ex : `https://nono-smart-sarl.vercel.app`).
 4. `JWT_SECRET` est généré automatiquement par Render.
 
 ### Option B — Manuelle
@@ -72,7 +81,35 @@ Deux options :
 4. Start command : `npm start`
 5. Ajoutez les variables d'environnement de `.env.example` (au minimum
    `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV=production`, `FRONTEND_URL`).
-6. Une fois déployé, lancez le seed une fois via le Shell Render : `npm run seed`.
+
+### 3. Générer la migration initiale (obligatoire, une seule fois)
+
+Une fois le service Render créé (peu importe l'option A ou B), sur **votre
+ordinateur**, dans le dossier `backend` :
+
+```bash
+# Recuperez l'URL externe depuis Render : dashboard > votre base Postgres >
+# Connections > "External Database URL" (pas l'Internal, qui n'est joignable
+# que depuis l'interieur du reseau Render)
+echo "DATABASE_URL=postgresql://...url-externe-copiee-depuis-render..." > .env
+
+npm install
+npx prisma migrate dev --name init   # cree ET applique les tables sur la vraie base
+npm run seed                          # peuple categories/produits/zones/comptes demo
+```
+
+`prisma migrate dev` génère le dossier `prisma/migrations/` — **committez-le et
+poussez-le** sur GitHub. Les déploiements suivants (et tout changement futur du
+schéma) s'appliqueront ensuite automatiquement via `prisma migrate deploy` au
+build, sans repasser par cette étape manuelle.
+
+**Vous n'avez pas Node.js en local ?** Alternative plus rapide (mais qui ne
+crée pas d'historique de migration propre, à réserver au déblocage
+d'urgence) : dashboard Render > votre service > onglet **Shell**, puis :
+```bash
+npx prisma db push
+npm run seed
+```
 
 > ⚠️ **Base Postgres gratuite Render** : elle expire automatiquement 30 jours après
 > sa création (14 jours de grâce ensuite avant suppression définitive). Pratique
@@ -81,27 +118,23 @@ Deux options :
 > veille après 15 minutes d'inactivité (le premier appel après une veille prend
 > ~1 minute). Vérifiez les tarifs actuels sur render.com avant de choisir un plan.
 
-## 3. Paiement Mobile Money (MTN / Orange)
+## 3. Dépannage : erreur CORS depuis le frontend
 
-Le cahier des charges impose (section 20) que le paiement ne soit **jamais**
-validé uniquement depuis le navigateur. C'est respecté ici : chaque commande crée
-un `Payment` en base, et seul le backend peut le faire passer à `PAID`.
+Si le navigateur affiche `blocked by CORS policy: No 'Access-Control-Allow-Origin' header`,
+c'est presque toujours que `FRONTEND_URL` (variable d'environnement Render)
+ne correspond pas exactement à l'origine du frontend :
 
-En revanche, les appels réels aux API MTN Mobile Money et Orange Money nécessitent
-des identifiants marchand que vous seul pouvez obtenir :
-
-- MTN MoMo Collections : https://momodeveloper.mtn.com
-- Orange Money Web Payment : https://developer.orange.com
-
-En attendant, `src/integrations/mtnMomo.js` et `src/integrations/orangeMoney.js`
-simulent une demande de paiement initiée avec succès, ce qui permet de tester tout
-le tunnel (commande → paiement → confirmation → livraison) de bout en bout. Une
-route `POST /api/payments/:orderId/simulate` (désactivée si `NODE_ENV=production`)
-permet à un admin de forcer la confirmation en local pendant les tests.
-
-**À faire avant mise en production réelle :** remplacer le contenu de ces deux
-fichiers par les vrais appels API, et ajouter un endpoint de callback/webhook pour
-recevoir la confirmation asynchrone des opérateurs.
+1. Dashboard Render > votre service > **Environment** > vérifiez `FRONTEND_URL`.
+2. Elle doit être **identique** à l'URL affichée dans l'erreur du navigateur
+   (ex : `https://nono-smart-sarl.vercel.app`), sans slash final. Un slash
+   final ou un `www.` en trop suffit à faire échouer la comparaison.
+3. Plusieurs origines (ex: domaine personnalisé + sous-domaine Vercel) :
+   séparez-les par une virgule, sans espace : `FRONTEND_URL=https://a.com,https://b.vercel.app`
+4. Sauvegardez → Render redéploie automatiquement. Attendez la fin du déploiement
+   (onglet **Logs**) avant de retester.
+5. Toute origine refusée est maintenant journalisée côté serveur
+   (`[cors] Origine refusee : "..."`), visible dans les Logs Render — utile
+   pour confirmer l'origine exacte envoyée par le navigateur si le problème persiste.
 
 ## 4. Ce qui est implémenté (MVP + Phase 2 + Phase 3 complètes)
 
