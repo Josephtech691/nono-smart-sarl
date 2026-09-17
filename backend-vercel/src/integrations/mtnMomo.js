@@ -1,46 +1,316 @@
-// Integration MTN Mobile Money - Collections API.
-// Portail developpeur : https://momodeveloper.mtn.com
-//
-// Ce fichier est un point d'integration clairement isole : en Phase 2, brancher
-// ici les vrais appels (RequestToPay puis polling/callback du statut) avec les
-// identifiants MTN_MOMO_* definis dans le .env. Tant que ce n'est pas fait,
-// requestToPay() simule une demande initiee avec succes (statut PROCESSING),
-// pour permettre de tester tout le tunnel de commande de bout en bout.
-//
-// Forme reelle attendue (a decommenter/adapter une fois les identifiants
-// obtenus) :
-//
-//   const axios = require('axios');
-//   async function requestToPay({ amount, phoneNumber, externalId }) {
-//     const token = await getAccessToken();
-//     const referenceId = crypto.randomUUID();
-//     await axios.post(`${process.env.MTN_MOMO_API_URL}/collection/v1_0/requesttopay`, {
-//       amount: String(amount),
-//       currency: 'XAF',
-//       externalId,
-//       payer: { partyIdType: 'MSISDN', partyId: phoneNumber },
-//       payerMessage: 'Commande NONO SMART',
-//       payeeNote: externalId,
-//     }, {
-//       headers: {
-//         Authorization: `Bearer ${token}`,
-//         'X-Reference-Id': referenceId,
-//         'X-Target-Environment': process.env.MTN_MOMO_TARGET_ENVIRONMENT,
-//         'Ocp-Apim-Subscription-Key': process.env.MTN_MOMO_SUBSCRIPTION_KEY,
-//       },
-//     });
-//     return { referenceId, status: 'PENDING' };
-//   }
+/**
+ * Intégration MTN Mobile Money - Collections API
+ * NONO SMART SARL
+ *
+ * Sandbox MTN MoMo
+ *
+ * Variables attendues :
+ *
+ * MTN_MOMO_API_URL=https://sandbox.momodeveloper.mtn.com
+ * MTN_MOMO_API_KEY=<API USER / X-Reference-Id>
+ * MTN_MOMO_API_SECRET=<API KEY générée par MTN>
+ * MTN_MOMO_SUBSCRIPTION_KEY=<SUBSCRIPTION KEY>
+ * MTN_MOMO_TARGET_ENVIRONMENT=sandbox
+ */
 
-async function requestToPay({ amount, phoneNumber, externalId }) {
-  if (!process.env.MTN_MOMO_SUBSCRIPTION_KEY) {
-    console.warn('[mtnMomo] Cles API absentes - reponse simulee (mode developpement)');
+const crypto = require('crypto');
+
+const API_URL =
+  process.env.MTN_MOMO_API_URL ||
+  'https://sandbox.momodeveloper.mtn.com';
+
+const TARGET_ENVIRONMENT =
+  process.env.MTN_MOMO_TARGET_ENVIRONMENT || 'sandbox';
+
+/**
+ * Vérifie que les identifiants nécessaires sont présents.
+ */
+function validateConfig() {
+  const required = [
+    'MTN_MOMO_API_KEY',
+    'MTN_MOMO_API_SECRET',
+    'MTN_MOMO_SUBSCRIPTION_KEY',
+  ];
+
+  const missing = required.filter(
+    (name) => !process.env[name]
+  );
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Configuration MTN MoMo incomplète. Variables manquantes : ${missing.join(', ')}`
+    );
   }
+}
+
+/**
+ * Génère le header Authorization Basic utilisé
+ * pour obtenir le token OAuth MTN.
+ *
+ * IMPORTANT :
+ * MTN_MOMO_API_KEY    = API User / X-Reference-Id
+ * MTN_MOMO_API_SECRET = API Key générée par MTN
+ */
+function getBasicAuthorization() {
+  validateConfig();
+
+  const credentials = `${process.env.MTN_MOMO_API_KEY}:${process.env.MTN_MOMO_API_SECRET}`;
+
+  return `Basic ${Buffer.from(credentials).toString('base64')}`;
+}
+
+/**
+ * Obtient un access token MTN MoMo.
+ */
+async function getAccessToken() {
+  const response = await fetch(
+    `${API_URL}/collection/token/`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: getBasicAuthorization(),
+        'Ocp-Apim-Subscription-Key':
+          process.env.MTN_MOMO_SUBSCRIPTION_KEY,
+      },
+    }
+  );
+
+  const text = await response.text();
+
+  let data;
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok) {
+    const error = new Error(
+      `MTN OAuth error (${response.status})`
+    );
+
+    error.status = response.status;
+    error.response = data;
+
+    throw error;
+  }
+
+  if (!data.access_token) {
+    throw new Error(
+      'MTN OAuth : aucun access_token retourné par MTN'
+    );
+  }
+
+  return data.access_token;
+}
+
+/**
+ * Normalise un numéro de téléphone camerounais.
+ *
+ * Exemples :
+ *  - 677123456  -> 677123456
+ *  - 237677123456 -> 677123456
+ *  - +237677123456 -> 677123456
+ *
+ * MTN Collections attend généralement le MSISDN
+ * sans le préfixe international dans le contexte Sandbox.
+ */
+function normalizePhoneNumber(phoneNumber) {
+  if (!phoneNumber) {
+    throw new Error('Numéro de téléphone MTN manquant');
+  }
+
+  let phone = String(phoneNumber).trim();
+
+  phone = phone.replace(/\s+/g, '');
+
+  if (phone.startsWith('+237')) {
+    phone = phone.substring(4);
+  } else if (phone.startsWith('237')) {
+    phone = phone.substring(3);
+  }
+
+  if (!/^6\d{8}$/.test(phone)) {
+    throw new Error(
+      'Numéro MTN invalide. Utilise un numéro camerounais au format 6XXXXXXXX.'
+    );
+  }
+
+  return phone;
+}
+
+/**
+ * Lance une demande de paiement MTN Mobile Money.
+ *
+ * @param {Object} params
+ * @param {number|string} params.amount
+ * @param {string} params.phoneNumber
+ * @param {string} params.externalId
+ *
+ * @returns {Object}
+ */
+async function requestToPay({
+  amount,
+  phoneNumber,
+  externalId,
+}) {
+  validateConfig();
+
+  if (!amount || Number(amount) <= 0) {
+    throw new Error('Montant MTN invalide');
+  }
+
+  if (!externalId) {
+    throw new Error('externalId MTN manquant');
+  }
+
+  const normalizedPhone = normalizePhoneNumber(phoneNumber);
+
+  const accessToken = await getAccessToken();
+
+  /**
+   * X-Reference-Id identifie la demande de paiement.
+   *
+   * On génère un UUID différent pour chaque paiement.
+   */
+  const referenceId = crypto.randomUUID();
+
+  const payload = {
+    amount: String(Math.round(Number(amount))),
+    currency: 'XAF',
+    externalId: String(externalId),
+    payer: {
+      partyIdType: 'MSISDN',
+      partyId: normalizedPhone,
+    },
+    payerMessage: 'Commande NONO SMART',
+    payeeNote: String(externalId),
+  };
+
+  const response = await fetch(
+    `${API_URL}/collection/v1_0/requesttopay`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Reference-Id': referenceId,
+        'X-Target-Environment': TARGET_ENVIRONMENT,
+        'Ocp-Apim-Subscription-Key':
+          process.env.MTN_MOMO_SUBSCRIPTION_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    }
+  );
+
+  const text = await response.text();
+
+  let data = null;
+
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text || null;
+  }
+
+  /**
+   * MTN retourne normalement HTTP 202 Accepted
+   * lorsqu'une demande RequestToPay est correctement créée.
+   */
+  if (!response.ok) {
+    const error = new Error(
+      `MTN RequestToPay error (${response.status})`
+    );
+
+    error.status = response.status;
+    error.response = data;
+    error.referenceId = referenceId;
+
+    throw error;
+  }
+
   return {
-    referenceId: `MTN-SIM-${Date.now()}`,
+    referenceId,
     status: 'PENDING',
-    raw: { note: 'Reponse simulee - brancher la veritable API MTN MoMo ici', amount, phoneNumber, externalId },
+    raw: {
+      provider: 'mtn_momo',
+      httpStatus: response.status,
+      referenceId,
+      externalId,
+      amount: Number(amount),
+      phoneNumber: normalizedPhone,
+      response: data,
+    },
   };
 }
 
-module.exports = { requestToPay };
+/**
+ * Consulte le statut d'une demande RequestToPay.
+ *
+ * Statuts MTN possibles notamment :
+ *  - PENDING
+ *  - SUCCESSFUL
+ *  - FAILED
+ */
+async function getRequestToPayStatus(referenceId) {
+  if (!referenceId) {
+    throw new Error(
+      'ReferenceId MTN manquant pour la vérification du statut'
+    );
+  }
+
+  const accessToken = await getAccessToken();
+
+  const response = await fetch(
+    `${API_URL}/collection/v1_0/requesttopay/${encodeURIComponent(
+      referenceId
+    )}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'X-Target-Environment': TARGET_ENVIRONMENT,
+        'Ocp-Apim-Subscription-Key':
+          process.env.MTN_MOMO_SUBSCRIPTION_KEY,
+      },
+    }
+  );
+
+  const text = await response.text();
+
+  let data;
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok) {
+    const error = new Error(
+      `MTN status error (${response.status})`
+    );
+
+    error.status = response.status;
+    error.response = data;
+    error.referenceId = referenceId;
+
+    throw error;
+  }
+
+  return {
+    referenceId,
+    status: data.status || 'PENDING',
+    financialTransactionId:
+      data.financialTransactionId || null,
+    raw: data,
+  };
+}
+
+module.exports = {
+  getAccessToken,
+  requestToPay,
+  getRequestToPayStatus,
+  normalizePhoneNumber,
+};
