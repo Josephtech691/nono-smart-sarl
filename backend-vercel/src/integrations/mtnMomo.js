@@ -1,5 +1,5 @@
 /**
- * Intégration MTN Mobile Money - Collections API
+ * Intégration MTN Mobile Money - collections API
  * NONO SMART SARL
  *
  * Sandbox MTN MoMo
