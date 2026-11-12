@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Repeat, Pause, Play, Trash2 } from 'lucide-react';
 import { recurringOrdersApi } from '../../api/recurring';
-import AccountNav from '../../components/AccountNav';
+import AccountBack from '../../components/AccountBack';
 import EmptyState from '../../components/EmptyState';
 import { RowSkeleton } from '../../components/Skeleton';
 import { toast } from '../../store/toastStore';
@@ -29,8 +29,8 @@ export default function RecurringOrders() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Mon compte</h1>
-      <AccountNav />
+      <h1 className="text-2xl font-bold sm:text-3xl">Commandes récurrentes</h1>
+      <AccountBack />
 
       <p className="mb-4 text-sm text-ink/60">
         Les commandes habituelles sont générées automatiquement à leur échéance et vous êtes prévenu par notification.

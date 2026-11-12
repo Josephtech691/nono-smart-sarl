@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Building2, BadgeCheck, Clock, XCircle } from 'lucide-react';
 import { customersApi } from '../../api/customers';
 import { useAuthStore } from '../../store/authStore';
-import AccountNav from '../../components/AccountNav';
+import AccountBack from '../../components/AccountBack';
 import { toast } from '../../store/toastStore';
 import { PROFESSIONAL_STATUS_LABELS } from '../../utils/format';
 
@@ -38,8 +38,8 @@ export default function ProfessionalAccount() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Mon compte</h1>
-      <AccountNav />
+      <h1 className="text-2xl font-bold sm:text-3xl">Compte professionnel</h1>
+      <AccountBack />
 
       <div className="card p-5">
         <div className="flex items-center gap-3">

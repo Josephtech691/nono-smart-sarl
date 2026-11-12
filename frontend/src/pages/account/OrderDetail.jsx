@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, KeyRound, Send } from 'lucide-react';
+import { ArrowLeft, KeyRound, Send, CalendarDays, MapPin, Wallet, CalendarClock } from 'lucide-react';
 import { ordersApi } from '../../api/orders';
 import StatusTimeline from '../../components/StatusTimeline';
 import StarRating from '../../components/StarRating';
+import ReviewScores from '../../components/ReviewScores';
+import ContactDriverButton from '../../components/ContactDriverButton';
+import NeedHelp from '../../components/NeedHelp';
+import PaymentBadge from '../../components/PaymentBadge';
+import StatusBadge from '../../components/StatusBadge';
+import usePageMeta from '../../utils/usePageMeta';
+import { toast } from '../../store/toastStore';
 import Loader from '../../components/Loader';
-import { formatFCFA, PAYMENT_METHOD_LABELS } from '../../utils/format';
+import { formatFCFA, formatDate, PAYMENT_METHOD_LABELS } from '../../utils/format';
 
 export default function OrderDetail() {
+  usePageMeta('Détail de commande');
   const { id } = useParams();
   const [order, setOrder] = useState(null);
   const [review, setReview] = useState({ quality: 5, delivery: 5, service: 5, comment: '' });
@@ -21,8 +29,11 @@ export default function OrderDetail() {
   const submitReview = async () => {
     setReviewError('');
     try {
-      await ordersApi.review(id, review);
+      const created = await ordersApi.review(id, review);
+      // On affiche tout de suite l'avis enregistré à la place du formulaire.
+      setOrder((o) => (o ? { ...o, review: created } : o));
       setReviewSent(true);
+      toast.success('Merci pour votre avis !');
     } catch (err) {
       setReviewError(err.message);
     }
@@ -38,6 +49,10 @@ export default function OrderDetail() {
 
   const canCancel = ['PENDING', 'CONFIRMED'].includes(order.status);
   const canReview = order.status === 'DELIVERED' && !order.review;
+  const payNeedsAttention =
+    order.status !== 'CANCELLED' &&
+    ['MTN_MOMO', 'ORANGE_MONEY'].includes(order.payment?.method) &&
+    ['PENDING', 'PROCESSING', 'FAILED', 'CANCELLED'].includes(order.payment?.status);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
@@ -46,7 +61,10 @@ export default function OrderDetail() {
       </Link>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{order.orderNumber}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold">{order.orderNumber}</h1>
+          <StatusBadge status={order.status} />
+        </div>
         {canCancel && (
           <button onClick={cancelOrder} className="text-sm font-medium text-red-600 hover:underline">
             Annuler la commande
@@ -62,6 +80,8 @@ export default function OrderDetail() {
           </p>
         </div>
       )}
+
+      <ContactDriverButton order={order} className="mt-4 w-full sm:w-auto" />
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2">
         <div className="card p-5">
@@ -82,10 +102,53 @@ export default function OrderDetail() {
             <div className="mt-3 flex justify-between border-t border-line pt-3 font-display font-bold text-ink">
               <span>Total</span><span>{formatFCFA(order.total)}</span>
             </div>
-            <p className="mt-2 text-xs text-ink/50">Paiement : {PAYMENT_METHOD_LABELS[order.payment?.method]}</p>
+          </div>
+          <div className="card space-y-3 p-5 text-sm text-ink/70">
+            <h2 className="font-display font-semibold text-ink">Informations</h2>
+            <p className="flex items-start gap-2.5">
+              <CalendarDays size={16} className="mt-0.5 shrink-0 text-ink/40" />
+              <span>Commandée le {formatDate(order.createdAt)}</span>
+            </p>
+            <p className="flex items-start gap-2.5">
+              <MapPin size={16} className="mt-0.5 shrink-0 text-ink/40" />
+              <span>{order.address?.district}{order.address?.landmark ? ` — ${order.address.landmark}` : ''}</span>
+            </p>
+            {order.scheduledAt && (
+              <p className="flex items-start gap-2.5">
+                <CalendarClock size={16} className="mt-0.5 shrink-0 text-ink/40" />
+                <span>Livraison programmée : {formatDate(order.scheduledAt)}{order.notes ? ` · ${order.notes}` : ''}</span>
+              </p>
+            )}
+            <p className="flex flex-wrap items-center gap-2.5">
+              <Wallet size={16} className="shrink-0 text-ink/40" />
+              <span>{PAYMENT_METHOD_LABELS[order.payment?.method]}</span>
+              <PaymentBadge status={order.payment?.status} method={order.payment?.method} />
+            </p>
+            {order.payment?.transactionRef && (
+              <p className="pl-[26px] text-xs text-ink/40">Réf. transaction : {order.payment.transactionRef}</p>
+            )}
+            {payNeedsAttention && (
+              <Link to={`/commande-confirmee/${order.id}`} className="ml-[26px] inline-block text-sm font-semibold text-brand-700 hover:underline">
+                Finaliser le paiement →
+              </Link>
+            )}
           </div>
         </div>
       </div>
+
+      <NeedHelp orderNumber={order.orderNumber} className="mt-6" />
+
+      {order.review && (
+        <div className="card mt-6 p-5">
+          <h2 className="font-display font-semibold">Votre avis</h2>
+          <div className="mt-3">
+            <ReviewScores review={order.review} />
+          </div>
+          {order.review.comment && (
+            <p className="mt-3 rounded-lg bg-mist px-3 py-2.5 text-sm italic text-ink/70">« {order.review.comment} »</p>
+          )}
+        </div>
+      )}
 
       {canReview && (
         <div className="card mt-6 p-5">

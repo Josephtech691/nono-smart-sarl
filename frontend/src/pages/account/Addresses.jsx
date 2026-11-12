@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { MapPin, Plus, Trash2, Star } from 'lucide-react';
 import { addressesApi } from '../../api/logistics';
-import AccountNav from '../../components/AccountNav';
+import AccountBack from '../../components/AccountBack';
 import EmptyState from '../../components/EmptyState';
 import Loader from '../../components/Loader';
 
@@ -37,8 +37,8 @@ export default function Addresses() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-      <h1 className="text-2xl font-bold sm:text-3xl">Mon compte</h1>
-      <AccountNav />
+      <h1 className="text-2xl font-bold sm:text-3xl">Mes adresses</h1>
+      <AccountBack />
 
       <div className="mb-4 flex justify-end">
         <button onClick={() => setShowForm((s) => !s)} className="btn-secondary !py-2 text-sm">
