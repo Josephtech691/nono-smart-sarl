@@ -18,6 +18,7 @@ const createOrderSchema = z.object({
     .array(
       z.object({
         productId: z.string().min(1),
+        variantId: z.string().min(1).optional().nullable(),
         quantity: z.number().positive('La quantite doit etre superieure a 0'),
       })
     )
@@ -26,7 +27,8 @@ const createOrderSchema = z.object({
   guestPhone: z.string().optional(),
   addressId: z.string().optional(),
   newAddress: addressInputSchema.optional(),
-  deliveryZoneId: z.string().min(1, 'La zone de livraison est requise'),
+  // Livraison a tarif unique : la zone n'est plus necessaire (acceptee pour compatibilite).
+  deliveryZoneId: z.string().min(1).optional().nullable(),
   paymentMethod: z.enum(['MTN_MOMO', 'ORANGE_MONEY', 'CASH']),
   paymentPhoneNumber: z.string().optional(),
   couponCode: z.string().optional(),
@@ -47,6 +49,8 @@ const updateStatusSchema = z.object({
     'CANCELLED',
   ]),
   note: z.string().optional(),
+  // Livreur choisi par l'administration en passant la commande a « Prete » ou « Assignee ».
+  driverId: z.string().min(1).optional(),
 });
 
 module.exports = { addressInputSchema, createOrderSchema, updateStatusSchema };
