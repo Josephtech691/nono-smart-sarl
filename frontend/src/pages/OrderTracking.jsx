@@ -4,13 +4,18 @@ import { Search, KeyRound, FileDown } from 'lucide-react';
 import { ordersApi, downloadInvoiceByTracking } from '../api/orders';
 import StatusTimeline from '../components/StatusTimeline';
 import LiveDeliveryMap from '../components/LiveDeliveryMap';
+import ContactDriverButton from '../components/ContactDriverButton';
+import NeedHelp from '../components/NeedHelp';
+import PaymentBadge from '../components/PaymentBadge';
+import usePageMeta from '../utils/usePageMeta';
 import Loader from '../components/Loader';
 import { toast } from '../store/toastStore';
-import { formatFCFA, PAYMENT_METHOD_LABELS } from '../utils/format';
+import { formatFCFA, formatDate, PAYMENT_METHOD_LABELS } from '../utils/format';
 
 const LIVE_STATUSES = ['ASSIGNED', 'PICKED_UP', 'ON_DELIVERY'];
 
 export default function OrderTracking() {
+  usePageMeta('Suivre ma commande');
   const { orderNumber: paramNumber } = useParams();
   const navigate = useNavigate();
   const [orderNumber, setOrderNumber] = useState(paramNumber || '');
@@ -98,10 +103,21 @@ export default function OrderTracking() {
             <StatusTimeline status={order.status} />
           </div>
           <LiveDeliveryMap order={order} />
+          <ContactDriverButton order={order} className="w-full" />
+          <NeedHelp orderNumber={order.orderNumber} />
           <div className="card p-5 text-sm text-ink/70">
             <div className="flex justify-between"><span>Total</span><span className="font-semibold text-ink">{formatFCFA(order.total)}</span></div>
-            <div className="mt-1 flex justify-between"><span>Paiement</span><span>{PAYMENT_METHOD_LABELS[order.payment?.method]}</span></div>
-            <div className="mt-1 flex justify-between"><span>Livraison</span><span>{order.address?.district}</span></div>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span>Paiement</span>
+              <span className="flex items-center gap-2">
+                {PAYMENT_METHOD_LABELS[order.payment?.method]}
+                <PaymentBadge status={order.payment?.status} method={order.payment?.method} />
+              </span>
+            </div>
+            <div className="mt-2 flex justify-between gap-3"><span>Livraison</span><span className="text-right">{order.address?.district}{order.address?.landmark ? ` — ${order.address.landmark}` : ''}</span></div>
+            {order.scheduledAt && (
+              <div className="mt-2 flex justify-between gap-3"><span>Programmée</span><span className="text-right">{formatDate(order.scheduledAt)}</span></div>
+            )}
             <button onClick={handleInvoice} className="btn-secondary mt-4 w-full !py-2 text-sm">
               <FileDown size={15} /> Télécharger la facture (PDF)
             </button>

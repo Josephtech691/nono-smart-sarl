@@ -24,7 +24,7 @@ import {
 const FEATURES = [
   { icon: Truck, title: 'Livraison rapide', text: 'Partout à Yaoundé' },
   { icon: ShieldCheck, title: 'Produits frais', text: 'Qualité garantie' },
-  { icon: Wallet, title: 'Paiement sécurisé', text: 'MTN, Orange ou espèces' },
+  { icon: Wallet, title: 'Paiement sécurisé', text: 'MTN MoMo ou Orange Money' },
   { icon: Headphones, title: 'Service client', text: 'À votre écoute' },
   { icon: BadgePercent, title: 'Prix dégressifs', text: 'Plus vous achetez, moins vous payez' },
 ];
@@ -32,7 +32,7 @@ const FEATURES = [
 const STEPS = [
   { n: 1, title: 'Choisissez', text: "Silures frais ou alevins, la quantité qu'il vous faut." },
   { n: 2, title: 'Commandez', text: 'En ligne, avec ou sans compte.' },
-  { n: 3, title: 'Payez', text: 'MTN MoMo, Orange Money ou espèces à la livraison.' },
+  { n: 3, title: 'Payez', text: 'MTN MoMo ou Orange Money, en toute sécurité.' },
   { n: 4, title: 'Nous préparons', text: 'Votre commande est préparée avec soin.' },
   { n: 5, title: 'Nous livrons', text: 'Directement chez vous, à Yaoundé.' },
 ];
@@ -83,7 +83,7 @@ export default function Home() {
               <circle cx="70" cy="300" r="4" fill="#33B56C" fillOpacity="0.4" />
             </svg>
             <div className="absolute inset-[12%] overflow-hidden rounded-full border-4 border-white/10 shadow-2xl">
-              <img src="/products/hero-silure.jpg" alt="Silures frais NONO SMART" className="h-full w-full object-cover" />
+              <img src="/products/hero-silure.jpg" alt="Silures frais Fresh Fish" className="h-full w-full object-cover" />
             </div>
           </div>
         </div>
@@ -164,7 +164,7 @@ export default function Home() {
       </section>
 
       {/* COMMENT CA MARCHE */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+      <section id="comment-ca-marche" className="mx-auto max-w-7xl scroll-mt-20 px-4 py-16 sm:px-6">
         <h2 className="mb-10 text-center text-2xl font-bold sm:text-3xl">Comment ça marche</h2>
         <div className="grid gap-6 sm:grid-cols-5">
           {STEPS.map((s, i) => (
