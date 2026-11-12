@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Phone, MapPin, MessageCircle } from 'lucide-react';
+import PaymentLogos from './PaymentLogos';
 import {
   COMPANY_NAME,
   COMPANY_SUBTAGLINE,
@@ -40,27 +41,35 @@ export default function Footer() {
         <div>
           <h4 className="font-display text-sm font-semibold uppercase tracking-wide text-white/40">Livraison</h4>
           <ul className="mt-3 space-y-2 text-sm">
-            <li>Essos · Centre-ville · Bastos</li>
-            <li>Odza · Nkolbisson</li>
-            <li className="text-white/50">Zones et frais à Yaoundé, extension à venir</li>
+            <li>Partout à Yaoundé</li>
+            <li>1 000 FCFA, quelle que soit la distance</li>
+            <li>
+              <Link to="/livraison" className="text-brand-500 hover:underline">Détails de la livraison →</Link>
+            </li>
           </ul>
         </div>
 
         <div>
           <h4 className="font-display text-sm font-semibold uppercase tracking-wide text-white/40">Paiement</h4>
           <ul className="mt-3 space-y-2 text-sm">
-            <li>MTN Mobile Money</li>
-            <li>Orange Money</li>
-            <li>Espèces à la livraison</li>
+            <li><PaymentLogos className="h-10 w-10" /></li>
+            <li>MTN Mobile Money · Orange Money</li>
+            <li className="text-white/50">Espèces à la livraison pour les clients fidèles avec compte</li>
           </ul>
           <nav className="mt-5 flex flex-col gap-1.5 text-sm text-white/50">
-            <Link to="/admin/connexion" className="hover:text-white">Espace administration</Link>
-            <Link to="/livreur/connexion" className="hover:text-white">Espace livreur</Link>
+            <Link to="/a-propos" className="hover:text-white">À propos</Link>
+            <Link to="/#comment-ca-marche" className="hover:text-white">Comment ça marche</Link>
+            <Link to="/suivi-commande" className="hover:text-white">Suivre ma commande</Link>
+            <Link to="/contact" className="hover:text-white">Contact</Link>
           </nav>
         </div>
       </div>
       <div className="border-t border-white/10 px-4 py-5 text-center text-xs text-white/40 sm:px-6">
-        © {new Date().getFullYear()} {COMPANY_NAME} — Silures frais & alevins livrés à Yaoundé.
+        <p>© {new Date().getFullYear()} {COMPANY_NAME} — Silures frais & alevins livrés à Yaoundé.</p>
+        <p className="mt-2 flex flex-wrap justify-center gap-x-5 gap-y-1">
+          <Link to="/conditions-generales" className="hover:text-white">Conditions générales</Link>
+          <Link to="/confidentialite" className="hover:text-white">Politique de confidentialité</Link>
+        </p>
       </div>
     </footer>
   );

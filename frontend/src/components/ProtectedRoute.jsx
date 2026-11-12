@@ -14,7 +14,8 @@ export default function ProtectedRoute({ children, role, redirectTo = '/connexio
   if (!user) return <Navigate to={redirectTo} state={{ from: location }} replace />;
 
   if (role && user.role !== role) {
-    return <Navigate to="/" replace />;
+    // Espace du personnel (admin / livreur) : retour à sa page de connexion ; espace client : accueil.
+    return <Navigate to={redirectTo === '/connexion' ? '/' : redirectTo} replace />;
   }
 
   return children;
