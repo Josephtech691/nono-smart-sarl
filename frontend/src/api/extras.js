@@ -8,6 +8,7 @@ export const favoritesApi = {
 
 export const reviewsApi = {
   list: (params) => api.get('/reviews', { params }).then((r) => r.data),
+  mine: () => api.get('/reviews/mine').then((r) => r.data),
   moderate: (id, isVisible) => api.patch(`/reviews/${id}`, { isVisible }).then((r) => r.data),
 };
 
@@ -19,7 +20,8 @@ export const couponsApi = {
 };
 
 export const notificationsApi = {
-  list: () => api.get('/notifications').then((r) => r.data),
+  // { items, unreadCount } : les notifications de l'utilisateur connecté, les plus récentes d'abord.
+  list: (params) => api.get('/notifications', { params }).then((r) => r.data),
   markRead: (id) => api.patch(`/notifications/${id}/read`).then((r) => r.data),
   markAllRead: () => api.post('/notifications/read-all').then((r) => r.data),
 };
@@ -27,13 +29,14 @@ export const notificationsApi = {
 export const statisticsApi = {
   dashboard: () => api.get('/statistics/dashboard').then((r) => r.data),
   sales: (days) => api.get('/statistics/sales', { params: { days } }).then((r) => r.data),
-  products: () => api.get('/statistics/products').then((r) => r.data),
+  products: (params) => api.get('/statistics/products', { params }).then((r) => r.data),
   zones: () => api.get('/statistics/zones').then((r) => r.data),
   profitByProduct: () => api.get('/statistics/profit-by-product').then((r) => r.data),
   topCustomers: () => api.get('/statistics/top-customers').then((r) => r.data),
   driverPerformance: () => api.get('/statistics/driver-performance').then((r) => r.data),
   stockForecast: () => api.get('/statistics/stock-forecast').then((r) => r.data),
   anomalies: () => api.get('/statistics/anomalies').then((r) => r.data),
+  paymentBreakdown: (params) => api.get('/statistics/payment-breakdown', { params }).then((r) => r.data),
 };
 
 export const expensesApi = {

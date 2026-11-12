@@ -10,6 +10,8 @@ export const ordersApi = {
   autoAssignDriver: (id) => api.post(`/orders/${id}/auto-assign-driver`).then((r) => r.data),
   cancel: (id, reason) => api.post(`/orders/${id}/cancel`, { reason }).then((r) => r.data),
   review: (id, data) => api.post(`/orders/${id}/review`, data).then((r) => r.data),
+  // Espèces proposées ? (compte client + plus de 2 commandes payées par Mobile Money)
+  cashEligibility: () => api.get('/orders/cash-eligibility').then((r) => r.data),
 };
 
 // Le PDF est servi derriere l'authentification. On recupere le blob (le
@@ -26,20 +28,57 @@ export async function downloadInvoiceByTracking(orderNumber, phone) {
   triggerDownload(res.data, orderNumber);
 }
 
-function triggerDownload(blobData, orderNumber) {
-  const url = window.URL.createObjectURL(new Blob([blobData], { type: 'application/pdf' }));
+function saveBlob(blobData, filename, type) {
+  const url = window.URL.createObjectURL(new Blob([blobData], { type }));
   const link = document.createElement('a');
   link.href = url;
-  link.download = `facture-${orderNumber}.pdf`;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
 }
 
+function triggerDownload(blobData, orderNumber) {
+  saveBlob(blobData, `facture-${orderNumber}.pdf`, 'application/pdf');
+}
+
+// Impression de la facture (administration) : le PDF s'ouvre dans un nouvel onglet, d'où l'on imprime.
+// L'onglet est ouvert tout de suite, pendant le clic : après l'attente du PDF, les bloqueurs de fenêtres
+// le refuseraient. S'il est quand même bloqué, on retombe sur le téléchargement.
+export async function printInvoice(orderId, orderNumber) {
+  const tab = window.open('', '_blank');
+  try {
+    const res = await api.get(`/orders/${orderId}/invoice.pdf`, { responseType: 'blob' });
+    if (!tab) return triggerDownload(res.data, orderNumber);
+    const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+    tab.location.href = url;
+    setTimeout(() => window.URL.revokeObjectURL(url), 5 * 60 * 1000);
+  } catch (err) {
+    if (tab) tab.close();
+    throw err;
+  }
+  return undefined;
+}
+
+// Export CSV de la liste des commandes (mêmes filtres que la liste, sans pagination). Le fichier est servi
+// derrière l'authentification : on récupère le blob puis on déclenche le téléchargement.
+export async function downloadOrdersCsv(params) {
+  const res = await api.get('/orders/export.csv', { params, responseType: 'blob' });
+  const day = new Date().toLocaleDateString('fr-CA', { timeZone: 'Africa/Douala' });
+  saveBlob(res.data, `commandes-${day}.csv`, 'text/csv;charset=utf-8');
+}
+
 export const paymentsApi = {
   initiateMtn: (orderId, phoneNumber) => api.post(`/payments/${orderId}/mtn`, { phoneNumber }).then((r) => r.data),
   initiateOrange: (orderId, phoneNumber) => api.post(`/payments/${orderId}/orange`, { phoneNumber }).then((r) => r.data),
   status: (orderId) => api.get(`/payments/${orderId}/status`).then((r) => r.data),
-  simulate: (orderId) => api.post(`/payments/${orderId}/simulate`).then((r) => r.data),
+  // Environnement + état des clés API (bandeau d'erreur de développement, simulateur).
+  config: () => api.get('/payments/config').then((r) => r.data),
+  // Simulateur : disponible uniquement quand le serveur tourne en développement.
+  simulate: (orderId, outcome = 'success') => api.post(`/payments/${orderId}/simulate`, { outcome }).then((r) => r.data),
+  // Administration : liste filtrée + enregistrement manuel d'un encaissement / d'un remboursement.
+  list: (params) => api.get('/payments', { params }).then((r) => r.data),
+  markPaid: (orderId, data) => api.post(`/payments/${orderId}/mark-paid`, data).then((r) => r.data),
+  markRefunded: (orderId, data) => api.post(`/payments/${orderId}/mark-refunded`, data).then((r) => r.data),
 };
