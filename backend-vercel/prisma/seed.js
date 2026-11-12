@@ -1,4 +1,4 @@
-// Peuple la base avec les donnees reelles de NONO SMART SARL (issues du
+// Peuple la base avec les donnees reelles de Fresh Fish (issues du
 // cahier des charges et de la maquette) : categories, produits avec paliers
 // de prix degressifs, zones de livraison, un code promo de demonstration et
 // des comptes de demonstration (admin / livreur / client).
@@ -7,6 +7,7 @@
 
 const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
+const { SILURE_VARIANTS, toProductCreateData } = require('./catalog-data');
 
 const prisma = new PrismaClient();
 
@@ -112,6 +113,11 @@ async function main() {
     },
   });
 
+  // Variantes de silure (entier, nettoye, decoupe, gros, moyen, fume) - voir catalog-data.js
+  for (const variant of SILURE_VARIANTS) {
+    await prisma.product.create({ data: toProductCreateData(variant, silures.id) });
+  }
+
   console.log('Creation des zones de livraison (section 15)...');
   await prisma.deliveryZone.createMany({
     data: [
@@ -140,9 +146,9 @@ async function main() {
   await prisma.user.create({
     data: {
       firstName: 'Admin',
-      lastName: 'NONO SMART',
+      lastName: 'Fresh Fish',
       phone: '659103000',
-      email: 'admin@nonosmart.cm',
+      email: 'admin@freshfish.cm',
       password: passwordHash,
       role: 'ADMIN',
     },
@@ -153,7 +159,7 @@ async function main() {
       firstName: 'Jean',
       lastName: 'Livreur',
       phone: '674331099',
-      email: 'jean.livreur@nonosmart.cm',
+      email: 'jean.livreur@freshfish.cm',
       password: passwordHash,
       role: 'DRIVER',
       driverProfile: { create: { status: 'AVAILABLE', vehicle: 'Moto' } },
@@ -195,8 +201,8 @@ async function main() {
 
   console.log('\nSeed termine avec succes.');
   console.log('Comptes de demonstration (mot de passe : password123) :');
-  console.log('  Admin        -> telephone 659103000 / admin@nonosmart.cm');
-  console.log('  Livreur      -> telephone 674331099 / jean.livreur@nonosmart.cm');
+  console.log('  Admin        -> telephone 659103000 / admin@freshfish.cm');
+  console.log('  Livreur      -> telephone 674331099 / jean.livreur@freshfish.cm');
   console.log('  Client       -> telephone 690000000 / client@demo.cm');
   console.log('  Client pro   -> telephone 691000000 / pro@demo.cm (remise grossiste 8%)');
   console.log(`Produits crees : ${silureFrais.name}, ${alevinsSilure.name}`);
