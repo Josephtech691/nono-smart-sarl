@@ -1,4 +1,4 @@
-# NONO SMART SARL — API backend (variante Vercel)
+# Fresh Fish — API backend (variante Vercel)
 
 Même API, même base de code fonctionnelle que `backend/` (déploiement Render),
 adaptée pour tourner **sans problème** sur Vercel au cas où Render vous
@@ -51,7 +51,31 @@ utilisez ici un fournisseur avec un **pooler de connexions** intégré :
    `?pgbouncer=true&connection_limit=1`.
 3. Copiez la connexion directe (port `5432`) → `DIRECT_URL`.
 
-### Option C — Réutiliser la base Render existante
+### Option C — Aiven for PostgreSQL
+
+Hébergeur sérieux (sauvegardes, chiffrement, extensions), mais lisez ces points
+avant de choisir une formule (chiffres de la documentation Aiven, à revérifier
+sur [aiven.io](https://aiven.io/docs/products/postgresql/concepts/pg-free-tier)) :
+
+- **Formule gratuite** : 1 Go, 1 vCPU / 1 Go de RAM, **20 connexions maximum**,
+  **pas de pooler**, un seul service gratuit par organisation, sans carte
+  bancaire. Aiven peut **mettre le service en pause s'il reste inactif**
+  (notification préalable, redémarrage manuel) : adaptée aux tests, pas à une
+  boutique en production.
+- **Formule Developer** (annoncée en novembre 2025, à partir de 5 $/mois) :
+  jusqu'à 8 Go, pas de mise en pause automatique, sauvegardes quotidiennes ;
+  **15 connexions maximum** et toujours pas de pooler (le pooler est réservé aux
+  formules Startup et au-dessus).
+- Copiez l'URI de connexion fournie par Aiven (elle se termine par
+  `?sslmode=require`) dans `DATABASE_URL` **et** `DIRECT_URL`, et ajoutez
+  `&connection_limit=1` à `DATABASE_URL`.
+- Sans pooler et avec 15 à 20 connexions, le mode serverless de Vercel peut
+  saturer la base si beaucoup de visiteurs arrivent en même temps : pour Aiven,
+  la variante **Render** (`backend/`, un process unique) est plus adaptée.
+- Placez la base dans une région **Europe** et, si possible, choisissez la
+  région des fonctions Vercel la plus proche de la base.
+
+### Option D — Réutiliser la base Render existante
 
 Fonctionne aussi (même schéma), mais sans pooler dédié vous risquez des
 erreurs de connexion sous charge. Utilisez la même URL pour `DATABASE_URL`
@@ -59,12 +83,12 @@ et `DIRECT_URL` en dernier recours.
 
 ## 2. Déploiement sur Vercel
 
-> ⚠️ **Étape obligatoire avant que l'API fonctionne : générer la migration
-> initiale.** Le script `vercel-build` lance `prisma migrate deploy`, qui
-> **applique** des migrations existantes mais n'en **génère** jamais. Aucune
-> migration n'est fournie dans ce dépôt (impossible à générer sans être
-> connecté à une vraie base de données). Sans l'étape 7 ci-dessous, la base
-> reste vide et l'API renvoie des erreurs `The table ... does not exist`.
+> ℹ️ **Migrations fournies.** Le dossier `prisma/migrations/` contient déjà la
+> migration initiale (`20260810120000_init`) et celle de la connexion Google
+> (`20260827000000_google_oauth`). Le script `vercel-build` (`prisma generate &&
+> prisma migrate deploy`) les applique à chaque déploiement : la base est
+> créée toute seule au premier déploiement. Il ne reste qu'à la remplir une
+> fois (étape 7).
 
 1. Poussez ce repo sur GitHub (dossier `backend-vercel/` à la racine, ou seul repo).
 2. Sur [vercel.com](https://vercel.com) : **Add New > Project**, importez le repo.
@@ -75,17 +99,19 @@ et `DIRECT_URL` en dernier recours.
    `FRONTEND_URL` (URL Vercel exacte du frontend, sans slash final), `CRON_SECRET`.
    Copiez le reste de `.env.example` selon vos besoins.
 6. Déployez. Le script `vercel-build` (`prisma generate && prisma migrate
-   deploy`) s'exécute à chaque déploiement, mais n'a rien à appliquer tant que
-   l'étape 7 n'a pas été faite au moins une fois.
-7. **Sur votre ordinateur**, dans `backend-vercel`, avec `DATABASE_URL` /
-   `DIRECT_URL` de `.env` pointés vers votre base Neon/Supabase de production :
+   deploy`) crée les tables au premier déploiement, puis n'applique que les
+   nouvelles migrations aux suivants.
+7. **Une seule fois, sur votre ordinateur**, dans `backend-vercel`, avec
+   `DATABASE_URL` / `DIRECT_URL` de `.env` pointés vers votre base de production :
    ```bash
    npm install
-   npx prisma migrate dev --name init   # cree ET applique les tables
-   npm run seed                          # categories/produits/zones/comptes demo
+   npm run seed          # categories/produits/zones/comptes demo (repart de zero : base neuve uniquement)
    ```
-   Committez et poussez le dossier `prisma/migrations/` généré — les
-   déploiements suivants l'appliqueront automatiquement via `vercel-build`.
+   Sur une base déjà remplie, utilisez plutôt `npm run seed:catalog` : il
+   n'ajoute que les variantes de silure manquantes et n'efface rien.
+   Quand vous modifiez `prisma/schema.prisma`, générez une migration avec
+   `npx prisma migrate dev --name <description>` et committez
+   `prisma/migrations/` : le déploiement suivant l'applique automatiquement.
 
 Votre API est disponible sur `https://<votre-projet>.vercel.app/api/...`.
 Vérifiez avec `GET /api/health`.
@@ -148,3 +174,19 @@ npm run dev              # http://localhost:4000, via scripts/local-dev.js
 Vous pouvez aussi utiliser `vercel dev` (après `vercel link`) pour un
 environnement local qui simule fidèlement l'exécution serverless, y compris
 le déclenchement manuel du cron via `vercel crons run`.
+
+## Paiements Mobile Money
+
+Les paiements Mobile Money sont **réellement codés** (`src/integrations/mtnMomo.js`, `orangeMoney.js`, `src/services/payment.service.js`) :
+
+| Environnement | Comportement |
+|---|---|
+| `NODE_ENV=production` | Vraies API MTN MoMo / Orange Money. **Aucune simulation.** Si une clé manque, le paiement affiche « Erreur de développement : … clés manquantes : … » (et le site bloque la commande Mobile Money). La route `/api/payments/:id/simulate` répond 404. |
+| autre (développement) | Si les clés sont absentes, un **simulateur** remplace l'opérateur ; la page de confirmation propose « Simuler un paiement réussi / un échec ». |
+
+À renseigner dans les variables d'environnement de l'hébergeur (voir `.env.example`) : `API_PUBLIC_URL`, `CLIENT_URL`, `MTN_MOMO_API_URL`, `MTN_MOMO_API_USER`, `MTN_MOMO_API_KEY`, `MTN_MOMO_SUBSCRIPTION_KEY`, `MTN_MOMO_TARGET_ENVIRONMENT`, `ORANGE_MONEY_API_URL`, `ORANGE_MONEY_API_KEY`, `ORANGE_MONEY_API_SECRET`, `ORANGE_MONEY_MERCHANT_KEY`. `GET /api/payments/config` indique l'environnement et les clés manquantes ; le rapport est aussi écrit dans les logs au démarrage.
+
+- **MTN MoMo** : demande de paiement (RequestToPay) → validation par code PIN sur le téléphone → statut vérifié auprès de MTN (interrogation à chaque sondage de la page + callback `POST /api/payments/webhook/mtn`).
+- **Orange Money** : l'API renvoie une page de paiement, le client y est redirigé puis revient sur `/commande-confirmee/:id` ; statut confirmé par `transactionstatus` et notification `POST /api/payments/webhook/orange/:orderId` (jeton `notif_token` vérifié).
+- Une notification d'opérateur n'est jamais crue sur parole : le statut est toujours re-vérifié auprès de l'opérateur. Les confirmations sont idempotentes.
+- **Espèces** : réservées aux clients **avec compte** ayant déjà **payé plus de 2 commandes** (donc 3 et plus) via MTN/Orange — règle appliquée côté serveur (`src/services/cash.service.js`) ; `GET /api/orders/cash-eligibility` renseigne l'écran de paiement.
