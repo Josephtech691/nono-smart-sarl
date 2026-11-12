@@ -1,6 +1,6 @@
 const router = require('express').Router();
 
-router.get('/health', (req, res) => res.json({ status: 'ok', service: 'nono-smart-api', time: new Date().toISOString() }));
+router.get('/health', (req, res) => res.json({ status: 'ok', service: 'fresh-fish-api', time: new Date().toISOString() }));
 
 router.use('/auth', require('./auth.routes'));
 router.use('/categories', require('./category.routes'));

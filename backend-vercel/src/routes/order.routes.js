@@ -8,12 +8,19 @@ const reviewCtrl = require('../controllers/review.controller');
 
 // La creation de commande accepte les invites (optionalAuth) et les clients connectes
 router.post('/', optionalAuth, validate(createOrderSchema), ctrl.createOrder);
+// Le paiement en especes est-il propose a ce client ? (compte + plus de 2 commandes payees en Mobile Money)
+router.get('/cash-eligibility', optionalAuth, ctrl.cashEligibility);
 router.get('/track/:orderNumber', ctrl.trackOrder);
 router.get('/track/:orderNumber/invoice.pdf', ctrl.downloadInvoiceByTracking);
 
-router.get('/', requireAuth, ctrl.listOrders);
-router.get('/:id', requireAuth, ctrl.getOrder);
-router.get('/:id/invoice.pdf', requireAuth, ctrl.downloadInvoice);
+// Consultation reservee aux clients (leurs commandes) et a l'administration. Un livreur passe
+// par /drivers/me/* : sinon il pourrait lire toutes les commandes, leurs clients et les codes
+// de confirmation de livraison.
+router.get('/', requireAuth, requireRole('ADMIN', 'CUSTOMER'), ctrl.listOrders);
+// Avant /:id, sinon « export.csv » serait pris pour un identifiant de commande.
+router.get('/export.csv', requireAuth, requireRole('ADMIN'), ctrl.exportOrders);
+router.get('/:id', requireAuth, requireRole('ADMIN', 'CUSTOMER'), ctrl.getOrder);
+router.get('/:id/invoice.pdf', requireAuth, requireRole('ADMIN', 'CUSTOMER'), ctrl.downloadInvoice);
 router.patch('/:id/status', requireAuth, requireRole('ADMIN'), validate(updateStatusSchema), ctrl.updateStatus);
 router.post('/:id/assign-driver', requireAuth, requireRole('ADMIN'), ctrl.assignDriver);
 router.post('/:id/auto-assign-driver', requireAuth, requireRole('ADMIN'), ctrl.autoAssignDriver);
