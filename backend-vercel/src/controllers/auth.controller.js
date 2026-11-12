@@ -1,13 +1,35 @@
 const bcrypt = require('bcryptjs');
+const { OAuth2Client } = require('google-auth-library');
 const prisma = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { signToken } = require('../utils/jwt');
 const { generateReferralCode } = require('../utils/generators');
+const { phoneCandidates, normalizePhoneForStorage, isPendingPhone } = require('../utils/phone');
+const { sendSms, isSmsConfigured } = require('../integrations/sms');
+const {
+  RESET_TTL_MINUTES,
+  generateCode,
+  issueResetToken,
+  issueDecoyToken,
+  verifyResetToken,
+  isResetValid,
+  tooManyAttempts,
+  recordFailure,
+  clearFailures,
+} = require('../utils/passwordReset');
+
+const PHONE_PENDING_PREFIX = 'google-pending-';
+const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
 
 function sanitizeUser(user) {
   const { password, ...rest } = user;
-  return rest;
+  return {
+    ...rest,
+    // Les comptes crees via Google n'ont pas de mot de passe tant que le client n'en definit pas un.
+    hasPassword: !!password,
+    needsProfileCompletion: rest.phone?.startsWith(PHONE_PENDING_PREFIX) || false,
+  };
 }
 
 function buildAuthResponse(user) {
@@ -30,7 +52,7 @@ const register = asyncHandler(async (req, res) => {
   const { firstName, lastName, phone, email, password, referralCode } = req.body;
 
   const existing = await prisma.user.findFirst({
-    where: { OR: [{ phone }, ...(email ? [{ email }] : [])] },
+    where: { OR: [{ phone: { in: phoneCandidates(phone) } }, ...(email ? [{ email }] : [])] },
   });
   if (existing) throw new ApiError(409, 'Un compte existe deja avec ce telephone ou cet email');
 
@@ -46,7 +68,7 @@ const register = asyncHandler(async (req, res) => {
     data: {
       firstName,
       lastName,
-      phone,
+      phone: normalizePhoneForStorage(phone),
       email: email || null,
       password: hashed,
       role: 'CUSTOMER',
@@ -66,14 +88,71 @@ const login = asyncHandler(async (req, res) => {
   const { phone, password } = req.body;
 
   const user = await prisma.user.findFirst({
-    where: { OR: [{ phone }, { email: phone }] },
+    where: { OR: [{ phone: { in: phoneCandidates(phone) } }, { email: phone }] },
     include: { customerProfile: true, driverProfile: true },
   });
   if (!user) throw new ApiError(401, 'Identifiants incorrects');
   if (!user.isActive) throw new ApiError(403, 'Ce compte a ete desactive');
+  if (!user.password) {
+    throw new ApiError(400, "Ce compte utilise la connexion Google. Utilisez le bouton \"Continuer avec Google\".");
+  }
 
   const valid = await bcrypt.compare(password, user.password);
   if (!valid) throw new ApiError(401, 'Identifiants incorrects');
+
+  res.json(buildAuthResponse(user));
+});
+
+// POST /api/auth/google - connexion/inscription via Google Identity Services.
+// Le frontend envoie le "credential" (ID token JWT) recu du bouton Google ;
+// on le verifie aupres de Google avant de faire confiance a son contenu.
+// Necessite GOOGLE_CLIENT_ID (voir .env.example) - sans cette variable,
+// la route repond explicitement que la fonctionnalite n'est pas configuree
+// plutot que d'echouer silencieusement.
+const googleAuth = asyncHandler(async (req, res) => {
+  const { credential } = req.body;
+  if (!credential) throw new ApiError(400, 'Jeton Google manquant');
+  if (!googleClient) throw new ApiError(503, "La connexion Google n'est pas configuree sur ce serveur (GOOGLE_CLIENT_ID manquant)");
+
+  let payload;
+  try {
+    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: process.env.GOOGLE_CLIENT_ID });
+    payload = ticket.getPayload();
+  } catch (err) {
+    throw new ApiError(401, 'Jeton Google invalide ou expire');
+  }
+
+  const { sub: googleId, email, given_name: firstName, family_name: lastName } = payload;
+  if (!email) throw new ApiError(400, "Ce compte Google ne fournit pas d'adresse email");
+
+  const include = { customerProfile: true, driverProfile: true };
+  let user = await prisma.user.findFirst({ where: { OR: [{ googleId }, { email }] }, include });
+
+  if (user) {
+    if (!user.isActive) throw new ApiError(403, 'Ce compte a ete desactive');
+    if (!user.googleId) {
+      // Compte existant (cree via telephone/mot de passe) avec le meme email -> on relie Google.
+      user = await prisma.user.update({ where: { id: user.id }, data: { googleId }, include });
+    }
+  } else {
+    const myReferralCode = await uniqueReferralCode(firstName || 'ami');
+    // Google ne fournit pas de numero de telephone (indispensable partout
+    // ailleurs dans l'appli pour la livraison). On cree un marqueur temporaire
+    // et needsProfileCompletion (voir sanitizeUser) indique au frontend qu'il
+    // doit inviter le client a renseigner son vrai numero.
+    user = await prisma.user.create({
+      data: {
+        firstName: firstName || 'Client',
+        lastName: lastName || '',
+        phone: `${PHONE_PENDING_PREFIX}${googleId}`,
+        email,
+        googleId,
+        role: 'CUSTOMER',
+        customerProfile: { create: { referralCode: myReferralCode } },
+      },
+      include,
+    });
+  }
 
   res.json(buildAuthResponse(user));
 });
@@ -83,4 +162,114 @@ const me = asyncHandler(async (req, res) => {
   res.json(sanitizeUser(req.user));
 });
 
-module.exports = { register, login, me };
+// PATCH /api/auth/me - modifier son profil (section 11 : "modifier son profil")
+const updateMe = asyncHandler(async (req, res) => {
+  const { firstName, lastName, phone, email } = req.body;
+  const data = {};
+
+  if (firstName) data.firstName = firstName;
+  if (lastName) data.lastName = lastName;
+  if (email !== undefined) data.email = email || null;
+
+  if (phone) {
+    const clash = await prisma.user.findFirst({ where: { phone: { in: phoneCandidates(phone) }, NOT: { id: req.user.id } } });
+    if (clash) throw new ApiError(409, 'Ce numero de telephone est deja utilise par un autre compte');
+    data.phone = normalizePhoneForStorage(phone);
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: req.user.id },
+    data,
+    include: { customerProfile: true, driverProfile: true },
+  });
+
+  res.json(sanitizeUser(updated));
+});
+
+// PATCH /api/auth/me/password - changer son mot de passe
+const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6) throw new ApiError(400, 'Le nouveau mot de passe doit contenir au moins 6 caracteres');
+
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+
+  if (user.password) {
+    const valid = currentPassword && (await bcrypt.compare(currentPassword, user.password));
+    if (!valid) throw new ApiError(401, 'Mot de passe actuel incorrect');
+  }
+
+  const hashed = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({ where: { id: req.user.id }, data: { password: hashed } });
+  res.json({ message: 'Mot de passe mis a jour' });
+});
+
+// POST /api/auth/forgot-password - envoie un code a 6 chiffres par SMS au numero
+// du compte client. La reponse est la meme que le compte existe ou non (pas
+// d'enumeration de comptes) ; voir utils/passwordReset.js pour le principe.
+const forgotPassword = asyncHandler(async (req, res) => {
+  const identifier = String(req.body.identifier || '').trim();
+
+  const user = await prisma.user.findFirst({
+    where: {
+      role: 'CUSTOMER',
+      isActive: true,
+      OR: [{ phone: { in: phoneCandidates(identifier) } }, { email: { equals: identifier, mode: 'insensitive' } }],
+    },
+  });
+
+  let resetToken;
+  if (user && !isPendingPhone(user.phone)) {
+    const code = generateCode();
+    resetToken = issueResetToken(user, code);
+    await sendSms(
+      user.phone,
+      `Fresh Fish : votre code de reinitialisation est ${code}. Il expire dans ${RESET_TTL_MINUTES} minutes. Ne le communiquez a personne.`
+    ).catch((err) => console.error('[auth:reset-sms]', err.message));
+  } else {
+    resetToken = issueDecoyToken();
+  }
+
+  res.json({
+    resetToken,
+    expiresInMinutes: RESET_TTL_MINUTES,
+    smsAvailable: isSmsConfigured(),
+    message: 'Si un compte correspond, un code de verification vient d\'etre envoye par SMS.',
+  });
+});
+
+// POST /api/auth/reset-password - verifie le code, change le mot de passe et
+// connecte directement le client.
+const resetPassword = asyncHandler(async (req, res) => {
+  const { resetToken, code, newPassword } = req.body;
+  const invalid = () => new ApiError(400, 'Code invalide ou expire. Demandez un nouveau code.');
+
+  let payload;
+  try {
+    payload = verifyResetToken(resetToken);
+  } catch (err) {
+    throw invalid();
+  }
+  if (tooManyAttempts(payload.sub)) throw new ApiError(429, 'Trop de tentatives. Reessayez dans quelques minutes.');
+
+  const user = await prisma.user.findUnique({
+    where: { id: payload.sub },
+    include: { customerProfile: true, driverProfile: true },
+  });
+  const allowed = !!user && user.role === 'CUSTOMER' && user.isActive;
+  if (!allowed || !isResetValid(payload, user, code)) {
+    recordFailure(payload.sub);
+    throw invalid();
+  }
+
+  const hashed = await bcrypt.hash(newPassword, 10);
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { password: hashed },
+    include: { customerProfile: true, driverProfile: true },
+  });
+  clearFailures(payload.sub);
+
+  res.json(buildAuthResponse(updated));
+});
+
+module.exports = { register, login, googleAuth, me, updateMe, changePassword, forgotPassword, resetPassword };

@@ -1,69 +1,151 @@
 const prisma = require('../config/db');
 const asyncHandler = require('../utils/asyncHandler');
+const { DAY_MS, startOfDayDouala, startOfMonthDouala, formatDoualaDay } = require('../utils/time');
 
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
+// Tous les « jours » de l'administration sont des jours de Douala (UTC+1), pas ceux du serveur
+// (UTC chez les hebergeurs) : sinon une commande passee entre minuit et 1 h serait comptee la veille.
+// Debut (minuit, heure de Douala) du jour situe n jours avant aujourd'hui.
 function daysAgo(n) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  return new Date(startOfDayDouala().getTime() - n * DAY_MS);
 }
+
+// ?days=30 -> entier de 1 a max, ou null s'il est absent ou invalide.
+function parseDays(value, max = 366) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, max) : null;
+}
+
+// Variation en % ; null quand il n'y a rien a comparer (valeur precedente nulle).
+function percentChange(current, previous) {
+  if (!previous) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+const IN_PROGRESS_STATUSES = ['CONFIRMED', 'PREPARING', 'READY', 'ASSIGNED', 'PICKED_UP', 'ON_DELIVERY'];
 
 // GET /api/statistics/dashboard (section 52)
+// Les comparaisons se font « a la meme heure » : a 10 h, on compare avec hier jusqu'a 10 h, pas avec
+// la journee d'hier entiere (sinon le matin affiche toujours une forte baisse). Meme principe pour le mois.
 const dashboard = asyncHandler(async (req, res) => {
-  const today = startOfToday();
+  const now = new Date();
+  const today = startOfDayDouala(now);
+  const yesterday = new Date(today.getTime() - DAY_MS);
+  const sameTimeYesterday = new Date(now.getTime() - DAY_MS);
+
+  const monthStart = startOfMonthDouala(now);
+  const lastMonthStart = startOfMonthDouala(now, 1);
+  // Meme duree que le mois en cours, sans deborder sur le mois en cours (fevrier contre mars...).
+  const lastMonthEnd = new Date(Math.min(lastMonthStart.getTime() + (now.getTime() - monthStart.getTime()), monthStart.getTime()));
+
+  const range = (gte, lt) => ({ gte, ...(lt ? { lt } : {}) });
+  const ordersIn = (gte, lt) => prisma.order.count({ where: { createdAt: range(gte, lt) } });
+  const revenueIn = (gte, lt) =>
+    prisma.order.aggregate({ where: { createdAt: range(gte, lt), status: { not: 'CANCELLED' } }, _sum: { total: true } });
+  const clientsIn = (gte, lt) => prisma.customerProfile.count({ where: { createdAt: range(gte, lt) } });
 
   const [
     ordersToday,
+    ordersYesterday,
     revenueTodayAgg,
+    revenueYesterdayAgg,
+    revenueMonthAgg,
+    revenueLastMonthAgg,
     ordersInProgress,
     ordersPending,
+    deliveriesInProgress,
     totalClients,
-    activeDrivers,
-    lowStockCount,
+    newClientsMonth,
+    newClientsLastMonth,
+    driversByStatus,
+    activeProductList,
+    mobileMoneyToVerify,
   ] = await Promise.all([
-    prisma.order.count({ where: { createdAt: { gte: today } } }),
-    prisma.order.aggregate({
-      where: { createdAt: { gte: today }, status: { not: 'CANCELLED' } },
-      _sum: { total: true },
-    }),
-    prisma.order.count({ where: { status: { in: ['CONFIRMED', 'PREPARING', 'READY', 'ASSIGNED', 'PICKED_UP', 'ON_DELIVERY'] } } }),
+    ordersIn(today),
+    ordersIn(yesterday, sameTimeYesterday),
+    revenueIn(today),
+    revenueIn(yesterday, sameTimeYesterday),
+    revenueIn(monthStart),
+    revenueIn(lastMonthStart, lastMonthEnd),
+    prisma.order.count({ where: { status: { in: IN_PROGRESS_STATUSES } } }),
     prisma.order.count({ where: { status: 'PENDING' } }),
+    prisma.delivery.count({ where: { status: { in: ['PICKED_UP', 'ON_ROUTE'] } } }),
     prisma.customerProfile.count(),
-    prisma.driverProfile.count({ where: { status: 'AVAILABLE' } }),
-    prisma.product.count({ where: { isActive: true } }),
+    clientsIn(monthStart),
+    clientsIn(lastMonthStart, lastMonthEnd),
+    prisma.driverProfile.groupBy({ by: ['status'], _count: { _all: true } }),
+    prisma.product.findMany({
+      where: { isActive: true },
+      select: { stockQuantity: true, reservedQuantity: true, alertThreshold: true, variants: { where: { isActive: true }, select: { stockQuantity: true, reservedQuantity: true } } },
+    }),
+    // Paiements Mobile Money a verifier : tant que MTN / Orange ne sont pas branches, c'est
+    // l'administration qui confirme chaque paiement (page « Paiements »).
+    prisma.payment.count({
+      where: { method: { in: ['MTN_MOMO', 'ORANGE_MONEY'] }, status: { in: ['PENDING', 'PROCESSING'] }, order: { status: { not: 'CANCELLED' } } },
+    }),
   ]);
 
+  const drivers = { available: 0, busy: 0, offline: 0, suspended: 0 };
+  for (const g of driversByStatus) drivers[g.status.toLowerCase()] = g._count._all;
+
+  // Produit a variantes : le disponible est la somme des pieces disponibles de ses variantes.
+  const availableOf = (p) => (p.variants?.length ? p.variants.reduce((sum, v) => sum + v.stockQuantity - v.reservedQuantity, 0) : p.stockQuantity - p.reservedQuantity);
+  const lowStockCount = activeProductList.filter((p) => p.alertThreshold > 0 && availableOf(p) <= p.alertThreshold).length;
+
+  const revenueToday = revenueTodayAgg._sum.total || 0;
+  const revenueYesterday = revenueYesterdayAgg._sum.total || 0;
+  const revenueMonth = revenueMonthAgg._sum.total || 0;
+  const revenueLastMonth = revenueLastMonthAgg._sum.total || 0;
+
   res.json({
+    // Champs historiques (inchanges)
     ordersToday,
-    revenueToday: revenueTodayAgg._sum.total || 0,
+    revenueToday,
     ordersInProgress,
     ordersPending,
     totalClients,
-    activeDrivers,
-    activeProducts: lowStockCount,
+    activeDrivers: drivers.available,
+    activeProducts: activeProductList.length,
+    // Ajouts : comparaisons, livraisons, stock, Mobile Money a verifier
+    ordersYesterday,
+    revenueYesterday,
+    revenueMonth,
+    revenueLastMonth,
+    deliveriesInProgress,
+    newClientsMonth,
+    newClientsLastMonth,
+    lowStockCount,
+    mobileMoneyToVerify,
+    drivers,
+    deltas: {
+      orders: percentChange(ordersToday, ordersYesterday),
+      revenue: percentChange(revenueToday, revenueYesterday),
+      revenueMonth: percentChange(revenueMonth, revenueLastMonth),
+      newClients: percentChange(newClientsMonth, newClientsLastMonth),
+    },
+    asOf: now.toISOString(),
   });
 });
 
 // GET /api/statistics/sales?days=30 (section 53)
+// `days` = nombre de jours affiches, aujourd'hui compris (30 jours = aujourd'hui + les 29 precedents).
+// Un point par jour, y compris les jours sans vente : sinon le graphique relie des jours non consecutifs.
 const sales = asyncHandler(async (req, res) => {
-  const days = Math.min(Number(req.query.days) || 14, 90);
-  const since = daysAgo(days);
+  const days = parseDays(req.query.days, 90) || 14;
+  const since = daysAgo(days - 1);
 
   const orders = await prisma.order.findMany({
     where: { createdAt: { gte: since }, status: { not: 'CANCELLED' } },
     select: { total: true, createdAt: true },
   });
 
-  const byDay = {};
+  const byDay = new Map();
+  for (let i = 0; i < days; i += 1) byDay.set(formatDoualaDay(new Date(since.getTime() + i * DAY_MS)), { total: 0, orders: 0 });
   for (const o of orders) {
-    const key = o.createdAt.toISOString().slice(0, 10);
-    byDay[key] = (byDay[key] || 0) + o.total;
+    const entry = byDay.get(formatDoualaDay(o.createdAt));
+    if (entry) {
+      entry.total += o.total;
+      entry.orders += 1;
+    }
   }
 
   const revenue = orders.reduce((sum, o) => sum + o.total, 0);
@@ -73,16 +155,22 @@ const sales = asyncHandler(async (req, res) => {
     revenue,
     ordersCount: orders.length,
     averageOrder,
-    dailyRevenue: Object.entries(byDay).map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date)),
+    days,
+    dailyRevenue: [...byDay].map(([date, v]) => ({ date, total: v.total, orders: v.orders })),
   });
 });
 
-// GET /api/statistics/products (produits les plus/moins vendus - section 53)
+// GET /api/statistics/products?days=30&limit=5 (produits les plus/moins vendus - section 53)
+// Sans `days` : depuis le debut. Sans `limit` : tous les produits.
 const products = asyncHandler(async (req, res) => {
+  const days = parseDays(req.query.days);
+  const limit = parseDays(req.query.limit, 100);
   const grouped = await prisma.orderItem.groupBy({
     by: ['productId', 'name'],
+    where: { order: { status: { not: 'CANCELLED' }, ...(days ? { createdAt: { gte: daysAgo(days - 1) } } : {}) } },
     _sum: { quantity: true, total: true },
     orderBy: { _sum: { total: 'desc' } },
+    ...(limit ? { take: limit } : {}),
   });
 
   res.json(
@@ -210,7 +298,7 @@ const stockForecast = asyncHandler(async (req, res) => {
   const windowDays = 14;
   const since = daysAgo(windowDays);
 
-  const products = await prisma.product.findMany({ where: { isActive: true } });
+  const products = await prisma.product.findMany({ where: { isActive: true }, include: { variants: { where: { isActive: true } } } });
   const sales = await prisma.orderItem.findMany({
     where: { order: { createdAt: { gte: since }, status: { not: 'CANCELLED' } } },
     select: { productId: true, quantity: true },
@@ -221,7 +309,7 @@ const stockForecast = asyncHandler(async (req, res) => {
 
   const results = products.map((p) => {
     const avgDaily = (soldByProduct[p.id] || 0) / windowDays;
-    const available = p.stockQuantity - p.reservedQuantity;
+    const available = p.variants?.length ? p.variants.reduce((sum, v) => sum + v.stockQuantity - v.reservedQuantity, 0) : p.stockQuantity - p.reservedQuantity;
     const daysUntilStockout = avgDaily > 0 ? Math.round((available / avgDaily) * 10) / 10 : null;
     return {
       productId: p.id,
@@ -250,7 +338,7 @@ const anomalies = asyncHandler(async (req, res) => {
 
   const byDay = {};
   for (const o of orders) {
-    const key = o.createdAt.toISOString().slice(0, 10);
+    const key = formatDoualaDay(o.createdAt);
     if (!byDay[key]) byDay[key] = { date: key, ordersCount: 0, revenue: 0, cancelled: 0 };
     byDay[key].ordersCount += 1;
     if (o.status === 'CANCELLED') byDay[key].cancelled += 1;
@@ -287,4 +375,27 @@ const anomalies = asyncHandler(async (req, res) => {
   res.json({ baseline: { avgOrdersPerDay: Math.round(ordersMean * 10) / 10, avgRevenuePerDay: Math.round(revenueMean) }, anomalies: flagged });
 });
 
-module.exports = { dashboard, sales, products, zones, profitByProduct, topCustomers, driverPerformance, stockForecast, anomalies };
+// GET /api/statistics/payment-breakdown?days=30 - repartition des paiements encaisses par
+// methode (camembert du tableau de bord admin, section 52-53). Sans `days` : depuis le debut.
+const paymentBreakdown = asyncHandler(async (req, res) => {
+  const days = parseDays(req.query.days);
+  const grouped = await prisma.payment.groupBy({
+    by: ['method'],
+    where: { status: 'PAID', ...(days ? { createdAt: { gte: daysAgo(days - 1) } } : {}) },
+    _count: { _all: true },
+    _sum: { amount: true },
+  });
+
+  const total = grouped.reduce((sum, g) => sum + g._count._all, 0);
+
+  res.json(
+    grouped.map((g) => ({
+      method: g.method,
+      count: g._count._all,
+      amount: g._sum.amount || 0,
+      percent: total ? Math.round((g._count._all / total) * 100) : 0,
+    }))
+  );
+});
+
+module.exports = { dashboard, sales, products, zones, profitByProduct, topCustomers, driverPerformance, stockForecast, anomalies, paymentBreakdown };
