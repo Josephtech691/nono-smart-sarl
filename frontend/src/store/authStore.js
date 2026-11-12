@@ -1,32 +1,31 @@
 import { create } from 'zustand';
 import { authApi } from '../api/auth';
-import { TOKEN_KEY } from '../api/client';
+import { getToken, setToken, clearToken } from '../utils/tokenStorage';
 
 export const useAuthStore = create((set, get) => ({
   user: null,
-  status: 'idle', // idle | loading | ready
+  status: 'idle',
   error: null,
 
   isAuthenticated: () => !!get().user,
 
-  // Appelé une fois au démarrage de l'app pour restaurer la session à partir
-  // du token stocké (voir App.jsx).
   hydrate: async () => {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = getToken();
     if (!token) return set({ status: 'ready' });
     try {
       const user = await authApi.me();
       set({ user, status: 'ready' });
     } catch (err) {
-      localStorage.removeItem(TOKEN_KEY);
+      clearToken();
       set({ user: null, status: 'ready' });
     }
   },
 
-  login: async (credentials) => {
+  // `remember` (defaut : vrai) = "Se souvenir de moi" ; il n'est pas envoye au serveur.
+  login: async ({ remember = true, ...credentials }) => {
     set({ error: null });
     const { token, user } = await authApi.login(credentials);
-    localStorage.setItem(TOKEN_KEY, token);
+    setToken(token, remember);
     set({ user });
     return user;
   },
@@ -34,13 +33,36 @@ export const useAuthStore = create((set, get) => ({
   register: async (data) => {
     set({ error: null });
     const { token, user } = await authApi.register(data);
-    localStorage.setItem(TOKEN_KEY, token);
+    setToken(token, true);
+    set({ user });
+    return user;
+  },
+
+  loginWithGoogle: async (credential) => {
+    set({ error: null });
+    const { token, user } = await authApi.google(credential);
+    setToken(token, true);
+    set({ user });
+    return user;
+  },
+
+  // Fin de la procedure "mot de passe oublie" : le serveur connecte directement le client.
+  resetPassword: async (data) => {
+    set({ error: null });
+    const { token, user } = await authApi.resetPassword(data);
+    setToken(token, true);
+    set({ user });
+    return user;
+  },
+
+  updateProfile: async (data) => {
+    const user = await authApi.updateMe(data);
     set({ user });
     return user;
   },
 
   logout: () => {
-    localStorage.removeItem(TOKEN_KEY);
+    clearToken();
     set({ user: null });
   },
 }));
