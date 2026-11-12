@@ -24,7 +24,7 @@ if (missing.length) {
 }
 
 const server = app.listen(PORT, () => {
-  console.log(`API NONO SMART (variante Vercel) demarree sur le port ${PORT} (${process.env.NODE_ENV || 'development'})`);
+  console.log(`API Fresh Fish (variante Vercel) demarree sur le port ${PORT} (${process.env.NODE_ENV || 'development'})`);
 });
 
 async function shutdown(signal) {
