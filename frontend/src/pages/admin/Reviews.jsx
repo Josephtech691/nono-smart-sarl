@@ -4,8 +4,10 @@ import { reviewsApi } from '../../api/extras';
 import Loader from '../../components/Loader';
 import StarRating from '../../components/StarRating';
 import { formatDate } from '../../utils/format';
+import usePageMeta from '../../utils/usePageMeta';
 
 export default function AdminReviews() {
+  usePageMeta('Avis clients');
   const [reviews, setReviews] = useState(null);
 
   const load = () => reviewsApi.list().then(setReviews);

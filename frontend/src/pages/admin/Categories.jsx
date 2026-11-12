@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react';
 import { Plus, Pencil, EyeOff } from 'lucide-react';
 import { categoriesApi } from '../../api/catalog';
 import Loader from '../../components/Loader';
+import usePageMeta from '../../utils/usePageMeta';
 
 export default function AdminCategories() {
+  usePageMeta('Catégories');
   const [categories, setCategories] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', description: '' });

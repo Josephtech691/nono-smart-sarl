@@ -4,6 +4,7 @@ import { TrendingUp, Users, Truck, PackageSearch, AlertTriangle, CheckCircle2 } 
 import { statisticsApi } from '../../api/extras';
 import { RowSkeleton } from '../../components/Skeleton';
 import { formatFCFA, formatDate } from '../../utils/format';
+import usePageMeta from '../../utils/usePageMeta';
 
 const TABS = [
   { key: 'profit', label: 'Marges par produit', icon: TrendingUp },
@@ -14,6 +15,7 @@ const TABS = [
 ];
 
 export default function AdminStatistics() {
+  usePageMeta('Statistiques');
   const [tab, setTab] = useState('profit');
   const [data, setData] = useState({});
   const [loading, setLoading] = useState(true);

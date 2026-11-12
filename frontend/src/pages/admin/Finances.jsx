@@ -3,6 +3,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { expensesApi } from '../../api/extras';
 import Loader from '../../components/Loader';
 import { formatFCFA, formatDate } from '../../utils/format';
+import usePageMeta from '../../utils/usePageMeta';
 
 const CATEGORIES = [
   { value: 'achat_poisson', label: 'Achat des poissons' },
@@ -16,6 +17,7 @@ const CATEGORIES = [
 const EMPTY_FORM = { category: 'achat_poisson', label: '', amount: '' };
 
 export default function AdminFinances() {
+  usePageMeta('Dépenses & bénéfices');
   const [expenses, setExpenses] = useState(null);
   const [profit, setProfit] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);

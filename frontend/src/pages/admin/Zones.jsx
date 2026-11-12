@@ -3,8 +3,10 @@ import { Plus, Pencil, EyeOff } from 'lucide-react';
 import { zonesApi } from '../../api/logistics';
 import Loader from '../../components/Loader';
 import { formatFCFA } from '../../utils/format';
+import usePageMeta from '../../utils/usePageMeta';
 
 export default function AdminZones() {
+  usePageMeta('Zones de livraison');
   const [zones, setZones] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', fee: '' });

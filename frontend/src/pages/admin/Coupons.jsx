@@ -3,10 +3,12 @@ import { Plus } from 'lucide-react';
 import { couponsApi } from '../../api/extras';
 import Loader from '../../components/Loader';
 import { formatFCFA, formatDate } from '../../utils/format';
+import usePageMeta from '../../utils/usePageMeta';
 
 const EMPTY_FORM = { code: '', type: 'PERCENTAGE', value: '', minOrderAmount: '', expiresAt: '' };
 
 export default function AdminCoupons() {
+  usePageMeta('Promotions');
   const [coupons, setCoupons] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
