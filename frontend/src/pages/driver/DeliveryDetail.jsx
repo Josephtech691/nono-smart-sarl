@@ -1,169 +1,404 @@
-import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Phone, Navigation, PackageCheck, CheckCircle2, Satellite } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowLeft, Phone, MessageCircle, Navigation, MapPin, Clock, StickyNote, PackageCheck, CheckCircle2,
+  AlertTriangle, Banknote, Smartphone, PackageSearch, Check,
+} from 'lucide-react';
 import { driversApi } from '../../api/logistics';
+import { useDriverStore } from '../../store/driverStore';
+import { DeliveryStatusBadge } from '../../components/driver/DeliveryCard';
+import ReportIssueModal from '../../components/ReportIssueModal';
+import EmptyState from '../../components/EmptyState';
 import Loader from '../../components/Loader';
 import { toast } from '../../store/toastStore';
-import { formatFCFA, PAYMENT_METHOD_LABELS } from '../../utils/format';
+import usePageMeta from '../../utils/usePageMeta';
+import { cashDue, customerName, customerPhone, dayKey, dayLabel, initialsOf, mapUrl, paymentSummary, scheduledLabel, telHref, timeLabel } from '../../utils/delivery';
+import { formatFCFA, whatsappUrl } from '../../utils/format';
 
-// Diffuse la position GPS toutes les 20s pendant une livraison active, pour
-// alimenter la carte de suivi cote client (section 75 "suivi livreur").
-function useLocationBroadcast(active) {
-  const watchIdRef = useRef(null);
-  const intervalRef = useRef(null);
-  const lastPositionRef = useRef(null);
-  const [sharing, setSharing] = useState(false);
+const STEPS = [
+  { key: 'todo', label: 'À livrer' },
+  { key: 'picked', label: 'Récupérée' },
+  { key: 'route', label: 'En route' },
+  { key: 'done', label: 'Livrée' },
+];
+const STEP_INDEX = { PENDING: 0, ASSIGNED: 0, PICKED_UP: 1, ON_ROUTE: 2, DELIVERED: 3 };
 
-  useEffect(() => {
-    if (!active || !navigator.geolocation) return;
+function Stepper({ status }) {
+  const current = STEP_INDEX[status];
+  if (current === undefined) return null; // livraison sans suite : pas de progression à montrer
+  return (
+    <ol aria-label="Progression de la livraison" className="flex items-start">
+      {STEPS.map((step, i) => {
+        const done = i < current || status === 'DELIVERED';
+        const isCurrent = i === current && status !== 'DELIVERED';
+        return (
+          <li key={step.key} aria-current={isCurrent ? 'step' : undefined} className="relative flex flex-1 flex-col items-center text-center">
+            {i > 0 && <span aria-hidden="true" className={`absolute right-1/2 top-3.5 h-0.5 w-full -translate-y-1/2 ${i <= current ? 'bg-brand-600' : 'bg-line'}`} />}
+            <span
+              className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                done ? 'bg-brand-600 text-white' : isCurrent ? 'bg-pine-900 text-brand-500 ring-4 ring-brand-500/20' : 'bg-white text-ink/40 ring-2 ring-line'
+              }`}
+            >
+              {done ? <Check size={14} strokeWidth={3} /> : i + 1}
+            </span>
+            <span className={`mt-1.5 text-[11px] leading-tight ${isCurrent ? 'font-semibold text-ink' : 'text-ink/50'}`}>{step.label}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        lastPositionRef.current = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-        setSharing(true);
-      },
-      () => setSharing(false),
-      { enableHighAccuracy: true, maximumAge: 15000 }
+function PaymentPanel({ delivery }) {
+  const { order } = delivery;
+  const pay = paymentSummary(order, delivery);
+  const done = delivery.status === 'DELIVERED';
+
+  if (pay.kind === 'cash') {
+    if (done) {
+      return (
+        <div className="flex items-center gap-3 rounded-xl2 bg-mist px-4 py-3">
+          <Banknote size={22} className="shrink-0 text-brand-700" />
+          <div>
+            <p className="text-xs text-ink/55">Espèces encaissées</p>
+            <p className="font-display text-lg font-bold text-ink">{formatFCFA(delivery.cashReceived ?? 0)}</p>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-center gap-3 rounded-xl2 border border-amber-200 bg-amber-50 px-4 py-3">
+        <Banknote size={24} className="shrink-0 text-amber-700" />
+        <div>
+          <p className="text-xs font-medium text-amber-800">Espèces à encaisser à la livraison</p>
+          <p className="font-display text-2xl font-bold text-ink" data-testid="cash-due">{formatFCFA(cashDue(delivery))}</p>
+        </div>
+      </div>
     );
-
-    const send = () => {
-      if (lastPositionRef.current) {
-        driversApi.updateMyLocation(lastPositionRef.current.latitude, lastPositionRef.current.longitude).catch(() => {});
-      }
-    };
-    send();
-    intervalRef.current = setInterval(send, 20000);
-
-    return () => {
-      if (watchIdRef.current != null) navigator.geolocation.clearWatch(watchIdRef.current);
-      clearInterval(intervalRef.current);
-    };
-  }, [active]);
-
-  return sharing;
+  }
+  if (pay.kind === 'paid') {
+    return (
+      <div className="flex items-center gap-3 rounded-xl2 bg-brand-500/10 px-4 py-3">
+        <Smartphone size={22} className="shrink-0 text-brand-700" />
+        <div>
+          <p className="text-sm font-semibold text-brand-700">{pay.label}</p>
+          <p className="text-xs text-ink/60">Rien à encaisser : la commande est déjà payée.</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-start gap-3 rounded-xl2 border border-amber-300 bg-amber-50 px-4 py-3">
+      <AlertTriangle size={22} className="mt-0.5 shrink-0 text-amber-600" />
+      <div>
+        <p className="text-sm font-semibold text-amber-900">{pay.label}</p>
+        <p className="text-xs text-amber-800/80">
+          {done ? "Ce paiement n'avait pas été confirmé au moment de la livraison." : "Contactez l'administration avant de remettre la commande : le paiement n'est pas encore confirmé."}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export default function DriverDeliveryDetail() {
   const { orderId } = useParams();
   const navigate = useNavigate();
+  const refreshStore = useDriverStore((s) => s.refresh);
   const [delivery, setDelivery] = useState(null);
-  const [code, setCode] = useState('');
-  const [cashReceived, setCashReceived] = useState('');
-  const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [issueOpen, setIssueOpen] = useState(false);
+  const seq = useRef(0); // une réponse plus ancienne ne doit jamais écraser une plus récente
+  const hasData = useRef(false);
 
-  const load = () => driversApi.getDelivery(orderId).then(setDelivery);
+  usePageMeta(delivery ? `Livraison ${delivery.order.orderNumber}` : 'Livraison');
 
-  useEffect(() => { load(); }, [orderId]);
+  const load = useCallback(async () => {
+    const mine = ++seq.current;
+    try {
+      const data = await driversApi.getDelivery(orderId);
+      if (mine !== seq.current) return;
+      hasData.current = true;
+      setDelivery(data);
+      setLoadError('');
+    } catch (err) {
+      if (mine !== seq.current) return;
+      if (err.status === 404) {
+        // Introuvable ou réassignée à un autre livreur.
+        hasData.current = false;
+        setDelivery(null);
+        setLoadError('not-found');
+      } else if (!hasData.current) {
+        setLoadError(err.message || 'Chargement impossible');
+      } // sinon : trou de réseau, on garde ce qui est affiché
+    }
+  }, [orderId]);
 
-  const isLocationActive = delivery && ['PICKED_UP', 'ON_ROUTE'].includes(delivery.status);
-  const sharingLocation = useLocationBroadcast(isLocationActive);
+  useEffect(() => {
+    hasData.current = false;
+    setDelivery(null);
+    setLoadError('');
+    load();
+    // Si l'administration annule ou réassigne la livraison pendant que le livreur la consulte.
+    const tick = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+    const timer = setInterval(tick, 30000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [load]);
 
-  if (!delivery) return <Loader />;
+  const act = async (request, successMessage) => {
+    setBusy(true);
+    try {
+      const next = await request();
+      seq.current += 1;
+      hasData.current = true;
+      setDelivery(next);
+      if (successMessage) toast.success(successMessage);
+      refreshStore();
+    } catch (err) {
+      toast.error(err.message || 'Action impossible');
+      load(); // la livraison a peut-être changé entre-temps (annulée, réassignée…)
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reportIssue = async ({ reason, note }) => {
+    await driversApi.reportIssue(orderId, { reason, note });
+    toast.success("Problème signalé à l'administration");
+    setIssueOpen(false);
+    await load();
+    refreshStore();
+  };
+
+  if (!delivery) {
+    if (loadError === 'not-found') {
+      return (
+        <EmptyState
+          icon={PackageSearch}
+          title="Livraison introuvable"
+          description="Elle n'existe pas ou n'est plus assignée à votre compte."
+          action={<Link to="/livreur/livraisons" className="btn-primary mt-2">Mes livraisons</Link>}
+        />
+      );
+    }
+    if (loadError) {
+      return (
+        <EmptyState
+          icon={PackageSearch}
+          title="Chargement impossible"
+          description={loadError}
+          action={<button type="button" className="btn-secondary mt-2" onClick={load}>Réessayer</button>}
+        />
+      );
+    }
+    return <Loader />;
+  }
 
   const { order } = delivery;
-  const isCash = order.payment?.method === 'CASH';
-  const mapUrl = order.address?.latitude
-    ? `https://www.google.com/maps/search/?api=1&query=${order.address.latitude},${order.address.longitude}`
-    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${order.address?.district}, Yaoundé, Cameroun`)}`;
-
-  const startDelivery = async () => {
-    setBusy(true);
-    try {
-      await driversApi.updateDeliveryStatus(orderId, 'PICKED_UP');
-      toast.success('Livraison commencée — position partagée avec le client');
-      await load();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const markOnRoute = async () => {
-    setBusy(true);
-    try {
-      await driversApi.updateDeliveryStatus(orderId, 'ON_ROUTE');
-      await load();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const confirm = async () => {
-    setError('');
-    if (code.length !== 4) return setError('Le code a 4 chiffres');
-    if (isCash && !cashReceived) return setError('Indiquez le montant reçu');
-    setBusy(true);
-    try {
-      await driversApi.confirmDelivery(orderId, { code, cashReceived: isCash ? Number(cashReceived) : undefined });
-      toast.success('Livraison confirmée');
-      navigate('/livreur');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const status = delivery.status;
+  const finished = status === 'DELIVERED' || status === 'FAILED';
+  const cancelled = status === 'FAILED' && order.status === 'CANCELLED';
+  const name = customerName(order);
+  const phone = customerPhone(order);
+  const tel = telHref(phone);
+  const wa = whatsappUrl(phone, `Bonjour, je suis votre livreur Fresh Fish pour la commande ${order.orderNumber}.`);
+  const slot = scheduledLabel(order);
+  const where = [order.address?.district, order.address?.landmark].filter(Boolean).join(' — ');
+  const canReportIssue = ['PENDING', 'ASSIGNED', 'PICKED_UP', 'ON_ROUTE'].includes(status);
+  const showContact = status !== 'DELIVERED';
 
   return (
-    <div>
-      <Link to="/livreur" className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-ink/60">
-        <ArrowLeft size={15} /> Mes livraisons
-      </Link>
+    <div className="space-y-4">
+      <div>
+        <Link to="/livreur/livraisons" className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-ink/60 hover:text-ink">
+          <ArrowLeft size={15} /> Mes livraisons
+        </Link>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-display text-xl font-bold text-ink">{order.orderNumber}</h1>
+          <DeliveryStatusBadge delivery={delivery} />
+        </div>
+      </div>
 
-      {isLocationActive && (
-        <div className={`mb-3 flex items-center gap-2 rounded-xl2 border px-3 py-2 text-xs font-medium ${sharingLocation ? 'border-brand-200 bg-brand-500/10 text-brand-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
-          <Satellite size={14} /> {sharingLocation ? 'Position partagée en direct avec le client' : "En attente du signal GPS de l'appareil..."}
+      {!finished && (
+        <div className="card px-3 py-4">
+          <Stepper status={status} />
         </div>
       )}
 
-      <div className="card p-4">
-        <p className="font-display text-lg font-bold text-ink">{order.orderNumber}</p>
-        <p className="mt-1 text-sm text-ink/60">{order.address?.district}{order.address?.landmark ? ` — ${order.address.landmark}` : ''}</p>
-        {order.address?.instructions && <p className="mt-1 text-xs italic text-ink/50">"{order.address.instructions}"</p>}
-
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <a href={`tel:${order.address?.phone}`} className="btn-secondary !py-2.5 text-sm"><Phone size={16} /> Appeler</a>
-          <a href={mapUrl} target="_blank" rel="noreferrer" className="btn-secondary !py-2.5 text-sm"><Navigation size={16} /> Itinéraire</a>
+      <section className="card p-4" aria-label="Client et adresse">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-pine-900 font-display text-sm font-bold text-brand-500" aria-hidden="true">
+            {initialsOf(name)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate font-display font-semibold text-ink">{name}</p>
+            {status !== 'DELIVERED' && phone && <p className="text-sm text-ink/55">{phone}</p>}
+          </div>
         </div>
-      </div>
 
-      <div className="card mt-4 p-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/40">Produits</p>
-        <ul className="space-y-1 text-sm text-ink/70">
-          {order.items?.map((it) => (
-            <li key={it.id} className="flex justify-between"><span>{it.name} × {it.quantity}</span><span>{formatFCFA(it.total)}</span></li>
-          ))}
-        </ul>
-        <div className="mt-2 flex justify-between border-t border-line pt-2 font-display font-bold text-ink">
-          <span>Total</span><span>{formatFCFA(order.total)}</span>
+        <div className="mt-4 space-y-2 border-t border-line pt-4 text-sm">
+          <p className="flex items-start gap-2 text-ink/80">
+            <MapPin size={16} className="mt-0.5 shrink-0 text-brand-700" />
+            <span>{where || 'Adresse à confirmer avec le client'}</span>
+          </p>
+          {order.address?.instructions && (
+            <p className="flex items-start gap-2 text-ink/60">
+              <StickyNote size={16} className="mt-0.5 shrink-0" />
+              <span className="italic">« {order.address.instructions} »</span>
+            </p>
+          )}
+          {slot && (
+            <p className="flex items-center gap-2 font-medium text-ink/70">
+              <Clock size={16} className="shrink-0" /> Livraison souhaitée : {slot}
+            </p>
+          )}
+          {order.notes && (
+            <p className="rounded-lg bg-mist px-3 py-2 text-ink/70">
+              <span className="font-semibold text-ink/80">Note du client : </span>
+              {order.notes}
+            </p>
+          )}
         </div>
-        <p className="mt-1 text-xs text-ink/50">{PAYMENT_METHOD_LABELS[order.payment?.method]}</p>
-      </div>
 
-      <div className="card mt-4 p-4">
-        {delivery.status === 'ASSIGNED' || delivery.status === 'PENDING' ? (
-          <button onClick={startDelivery} disabled={busy} className="btn-primary w-full"><PackageCheck size={17} /> Commencer la livraison</button>
-        ) : delivery.status === 'PICKED_UP' ? (
-          <button onClick={markOnRoute} disabled={busy} className="btn-primary w-full"><Navigation size={17} /> Je suis en route</button>
-        ) : delivery.status === 'ON_ROUTE' ? (
-          <div className="space-y-3">
-            <div>
-              <label className="label">Code de confirmation du client</label>
-              <input className="input text-center font-display text-lg tracking-widest" maxLength={4} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="0000" />
-            </div>
-            {isCash && (
-              <div>
-                <label className="label">Montant reçu en espèces (attendu : {formatFCFA(delivery.cashExpected)})</label>
-                <input type="number" className="input" value={cashReceived} onChange={(e) => setCashReceived(e.target.value)} />
+        {showContact && (
+          <div className="mt-4 space-y-2">
+            <a href={mapUrl(order)} target="_blank" rel="noreferrer" className="btn-primary w-full">
+              <Navigation size={17} /> Ouvrir dans la carte
+            </a>
+            {(tel || wa) && (
+              <div className={`grid gap-2 ${tel && wa ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {tel && (
+                  <a href={tel} className="btn-secondary">
+                    <Phone size={16} /> Appeler le client
+                  </a>
+                )}
+                {wa && (
+                  <a href={wa} target="_blank" rel="noreferrer" className="btn-secondary">
+                    <MessageCircle size={16} /> WhatsApp
+                  </a>
+                )}
               </div>
             )}
-            {error && <p className="text-sm text-red-600">{error}</p>}
-            <button onClick={confirm} disabled={busy} className="btn-primary w-full"><CheckCircle2 size={17} /> Confirmer la livraison</button>
+          </div>
+        )}
+      </section>
+
+      <section className="card space-y-3 p-4" aria-label="Action">
+        {status === 'PENDING' || status === 'ASSIGNED' ? (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => act(() => driversApi.updateDeliveryStatus(orderId, 'PICKED_UP'), 'Livraison commencée : votre position est partagée avec le client')}
+              className="btn-primary w-full"
+            >
+              <PackageCheck size={17} /> Commencer la livraison
+            </button>
+            <p className="text-center text-xs text-ink/50">Touchez ce bouton quand vous avez récupéré la commande.</p>
+          </>
+        ) : status === 'PICKED_UP' ? (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => act(() => driversApi.updateDeliveryStatus(orderId, 'ON_ROUTE'), 'Bonne route !')}
+              className="btn-primary w-full"
+            >
+              <Navigation size={17} /> Je suis en route
+            </button>
+            <p className="text-center text-xs text-ink/50">Le client est prévenu que vous arrivez.</p>
+          </>
+        ) : status === 'ON_ROUTE' ? (
+          <>
+            <button type="button" onClick={() => navigate(`/livreur/livraisons/${orderId}/confirmer`)} className="btn-primary w-full">
+              <CheckCircle2 size={17} /> Confirmer la livraison
+            </button>
+            <p className="text-center text-xs text-ink/50">À la remise, demandez au client son code à 4 chiffres.</p>
+          </>
+        ) : status === 'DELIVERED' ? (
+          <div className="flex items-start gap-3 text-sm">
+            <CheckCircle2 size={22} className="mt-0.5 shrink-0 text-brand-600" />
+            <div>
+              <p className="font-display font-semibold text-brand-700">Livraison terminée</p>
+              {delivery.deliveredAt && (
+                <p className="mt-0.5 text-ink/60">
+                  {dayLabel(dayKey(delivery.deliveredAt))} à {timeLabel(delivery.deliveredAt)}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : cancelled ? (
+          <div className="flex items-start gap-3 text-sm">
+            <AlertTriangle size={22} className="mt-0.5 shrink-0 text-red-500" />
+            <div>
+              <p className="font-display font-semibold text-red-700">Commande annulée</p>
+              <p className="mt-1 text-ink/60">Cette commande a été annulée : il n'y a plus rien à livrer.</p>
+            </div>
           </div>
         ) : (
-          <p className="text-center text-sm text-brand-700">Livraison terminée. Merci !</p>
+          <div className="flex items-start gap-3 text-sm text-amber-900">
+            <AlertTriangle size={22} className="mt-0.5 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-display font-semibold">Problème signalé</p>
+              <p className="mt-1 text-amber-800/80">
+                L'administration a été prévenue. Elle vous recontactera pour une nouvelle tentative, ou confiera la commande à un autre livreur.
+              </p>
+            </div>
+          </div>
         )}
-      </div>
+      </section>
+
+      {!cancelled && <PaymentPanel delivery={delivery} />}
+
+      <section className="card p-4" aria-label="Produits">
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/40">Produits</h2>
+        <ul className="space-y-1.5 text-sm text-ink/75">
+          {order.items?.map((item) => (
+            <li key={item.id} className="flex justify-between gap-3">
+              <span>
+                {item.name} × {Number(item.quantity).toLocaleString('fr-FR', { maximumFractionDigits: 2 })}
+              </span>
+              <span className="shrink-0">{formatFCFA(item.total)}</span>
+            </li>
+          ))}
+        </ul>
+        <dl className="mt-3 space-y-1 border-t border-line pt-3 text-sm">
+          {order.deliveryFee > 0 && (
+            <div className="flex justify-between text-ink/60">
+              <dt>Livraison</dt>
+              <dd>{formatFCFA(order.deliveryFee)}</dd>
+            </div>
+          )}
+          {order.discount > 0 && (
+            <div className="flex justify-between text-ink/60">
+              <dt>Remise</dt>
+              <dd>− {formatFCFA(order.discount)}</dd>
+            </div>
+          )}
+          <div className="flex justify-between font-display font-bold text-ink">
+            <dt>Total</dt>
+            <dd>{formatFCFA(order.total)}</dd>
+          </div>
+        </dl>
+      </section>
+
+      {canReportIssue && (
+        <button
+          type="button"
+          onClick={() => setIssueOpen(true)}
+          className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-amber-300 bg-amber-50 px-5 py-3 font-display text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+        >
+          <AlertTriangle size={17} /> Problème avec la livraison
+        </button>
+      )}
+
+      <ReportIssueModal open={issueOpen} onClose={() => setIssueOpen(false)} onSubmit={reportIssue} />
     </div>
   );
 }
