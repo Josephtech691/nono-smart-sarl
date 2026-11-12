@@ -27,4 +27,10 @@ async function sendSms(to, message) {
   return { status: 'SENT' };
 }
 
-module.exports = { sendSms };
+// Vrai quand une cle SMS est definie (SMS_API_KEY). Sert a dire honnetement a
+// l'utilisateur si un code par SMS peut lui parvenir.
+function isSmsConfigured() {
+  return !!process.env.SMS_API_KEY;
+}
+
+module.exports = { sendSms, isSmsConfigured };
