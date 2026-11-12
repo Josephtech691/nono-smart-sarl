@@ -5,7 +5,7 @@
 // on ne met jamais en cache les appels a /api/, qui doivent toujours refleter
 // l'etat reel des commandes/stocks.
 
-const CACHE_NAME = 'nono-smart-v1';
+const CACHE_NAME = 'fresh-fish-v1';
 const APP_SHELL = ['/', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
