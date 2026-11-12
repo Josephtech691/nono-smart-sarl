@@ -20,11 +20,11 @@ const { PrismaClient } = require('@prisma/client');
 const globalForPrisma = globalThis;
 
 const prisma =
-  globalForPrisma.__nonoSmartPrisma ||
+  globalForPrisma.__freshFishPrisma ||
   new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   });
 
-globalForPrisma.__nonoSmartPrisma = prisma;
+globalForPrisma.__freshFishPrisma = prisma;
 
 module.exports = prisma;
