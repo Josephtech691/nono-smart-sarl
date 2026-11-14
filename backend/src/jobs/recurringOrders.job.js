@@ -3,6 +3,7 @@ const prisma = require('../config/db');
 const orderService = require('../services/order.service');
 const { computeNextRunAt } = require('../utils/generators');
 const { notify, notifyAdmins } = require('../utils/notify');
+const { isPendingPhone } = require('../utils/phone');
 
 /**
  * Parcourt les commandes recurrentes actives dont l'echeance est arrivee et
@@ -23,6 +24,9 @@ async function runDueRecurringOrders() {
         addressId: recurring.addressId,
         deliveryZoneId: recurring.deliveryZoneId,
         paymentMethod: recurring.paymentMethod,
+        // Mobile Money : le numero du compte sert de numero de paiement (le client valide ensuite depuis sa commande).
+        paymentPhoneNumber:
+          recurring.paymentMethod !== 'CASH' && !isPendingPhone(recurring.customer.user.phone) ? recurring.customer.user.phone : null,
         items: recurring.items,
         notes: `Commande récurrente${recurring.label ? ` : ${recurring.label}` : ''}`,
         originRecurringOrderId: recurring.id,

@@ -4,7 +4,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const listMyFavorites = asyncHandler(async (req, res) => {
   const favorites = await prisma.favorite.findMany({
     where: { customerId: req.customerProfile.id },
-    include: { product: { include: { images: true, priceTiers: true } } },
+    include: { product: { include: { images: true, priceTiers: true, variants: { where: { isActive: true }, orderBy: { position: 'asc' } } } } },
     orderBy: { createdAt: 'desc' },
   });
   res.json(favorites);

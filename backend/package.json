@@ -1,7 +1,7 @@
 {
-  "name": "nono-smart-backend",
+  "name": "fresh-fish-backend",
   "version": "1.0.0",
-  "description": "API backend - Plateforme e-commerce de silures frais et alevins (NONO SMART SARL)",
+  "description": "API backend - Plateforme e-commerce de silures frais et alevins (Fresh Fish)",
   "main": "src/server.js",
   "type": "commonjs",
   "engines": {
@@ -15,6 +15,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "seed": "node prisma/seed.js",
+    "seed:catalog": "node prisma/seed-catalog.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -23,7 +24,9 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "firebase-admin": "^12.6.0",
     "express-rate-limit": "^7.4.0",
+    "google-auth-library": "^9.14.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",

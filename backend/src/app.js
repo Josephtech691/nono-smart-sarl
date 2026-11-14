@@ -6,6 +6,11 @@ const rateLimit = require('express-rate-limit');
 
 const routes = require('./routes');
 const { notFoundHandler, errorHandler } = require('./middlewares/error.middleware');
+const stripSecrets = require('./middlewares/stripSecrets.middleware');
+const paymentConfig = require('./config/payments');
+
+// Rapport de configuration des paiements dans les logs de l'hebergeur (cles manquantes, mode).
+paymentConfig.logStartupReport();
 
 const app = express();
 
@@ -39,6 +44,7 @@ app.use(
 
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(stripSecrets);
 
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
@@ -60,8 +66,19 @@ app.use(
   rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false })
 );
 
+// Reinitialisation du mot de passe : tres peu d'essais par IP (envoi de SMS +
+// devinette du code a 6 chiffres).
+app.use(
+  '/api/auth/forgot-password',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5, standardHeaders: true, legacyHeaders: false })
+);
+app.use(
+  '/api/auth/reset-password',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false })
+);
+
 app.get('/', (req, res) => {
-  res.json({ message: 'NONO SMART SARL - API silures & alevins', docs: '/api/health' });
+  res.json({ message: 'Fresh Fish - API silures & alevins', docs: '/api/health' });
 });
 
 app.use('/api', routes);

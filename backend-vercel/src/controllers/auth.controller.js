@@ -203,6 +203,57 @@ const changePassword = asyncHandler(async (req, res) => {
   res.json({ message: 'Mot de passe mis a jour' });
 });
 
+// DELETE /api/auth/me - suppression du compte par le client (exigence Google Play : suppression depuis l'application).
+// Les donnees personnelles sont effacees ou rendues anonymes ; les commandes passees sont conservees sans lien avec
+// la personne (obligations comptables). Refus tant qu'une commande est en cours.
+// Corps : { password } pour un compte avec mot de passe, { confirm: "SUPPRIMER" } pour un compte Google.
+const deleteMe = asyncHandler(async (req, res) => {
+  if (req.user.role !== 'CUSTOMER' || !req.customerProfile) {
+    throw new ApiError(403, 'La suppression du compte est reservee aux clients. Contactez l\'administration.');
+  }
+  const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+  const { password, confirm } = req.body || {};
+
+  if (user.password) {
+    const valid = password && (await bcrypt.compare(String(password), user.password));
+    if (!valid) throw new ApiError(401, 'Mot de passe incorrect');
+  } else if (String(confirm || '').trim().toUpperCase() !== 'SUPPRIMER') {
+    throw new ApiError(400, 'Tapez SUPPRIMER pour confirmer');
+  }
+
+  const customerId = req.customerProfile.id;
+  const pending = await prisma.order.count({ where: { customerId, status: { notIn: ['DELIVERED', 'CANCELLED'] } } });
+  if (pending > 0) {
+    throw new ApiError(400, 'Vous avez une commande en cours : attendez sa livraison ou annulez-la avant de supprimer votre compte.');
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.deviceToken.deleteMany({ where: { userId: user.id } });
+    await tx.notification.deleteMany({ where: { userId: user.id } });
+    await tx.favorite.deleteMany({ where: { customerId } });
+    await tx.recurringOrder.deleteMany({ where: { customerId } });
+    await tx.customerProductPrice.deleteMany({ where: { customerId } });
+    await tx.cart.deleteMany({ where: { customerId } });
+    // Adresses : supprimees, ou vidées si une commande passee s'y rapporte.
+    await tx.address.deleteMany({ where: { customerId, orders: { none: {} } } });
+    await tx.address.updateMany({
+      where: { customerId },
+      data: { fullName: 'Compte supprime', phone: '000000000', landmark: null, instructions: null, latitude: null, longitude: null, isDefault: false },
+    });
+    await tx.review.updateMany({ where: { customerId }, data: { comment: null } });
+    await tx.customerProfile.update({
+      where: { id: customerId },
+      data: { loyaltyPoints: 0, businessName: null, taxId: null, professionalStatus: 'NONE', wholesaleDiscountPercent: 0, customerType: 'PARTICULIER' },
+    });
+    await tx.user.update({
+      where: { id: user.id },
+      data: { firstName: 'Compte', lastName: 'supprime', phone: `deleted-${user.id}`, email: null, password: null, googleId: null, isActive: false },
+    });
+  });
+
+  res.json({ message: 'Votre compte a ete supprime.' });
+});
+
 // POST /api/auth/forgot-password - envoie un code a 6 chiffres par SMS au numero
 // du compte client. La reponse est la meme que le compte existe ou non (pas
 // d'enumeration de comptes) ; voir utils/passwordReset.js pour le principe.
@@ -272,4 +323,4 @@ const resetPassword = asyncHandler(async (req, res) => {
   res.json(buildAuthResponse(updated));
 });
 
-module.exports = { register, login, googleAuth, me, updateMe, changePassword, forgotPassword, resetPassword };
+module.exports = { register, login, googleAuth, me, updateMe, changePassword, deleteMe, forgotPassword, resetPassword };

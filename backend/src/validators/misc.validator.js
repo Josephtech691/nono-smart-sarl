@@ -32,6 +32,13 @@ const driverCreateSchema = z.object({
   vehicle: z.string().optional(),
 });
 
+// PATCH /drivers/:id (admin) : un statut inconnu ferait planter Prisma (erreur 500) au lieu d'un refus clair.
+const driverUpdateSchema = z.object({
+  status: z.enum(['AVAILABLE', 'BUSY', 'OFFLINE', 'SUSPENDED']).optional(),
+  vehicle: z.string().max(60).optional(),
+  isActive: z.boolean().optional(),
+});
+
 const expenseSchema = z.object({
   category: z.string().min(2),
   label: z.string().min(2),
@@ -39,4 +46,9 @@ const expenseSchema = z.object({
   incurredAt: z.string().datetime().optional(),
 });
 
-module.exports = { deliveryZoneSchema, couponSchema, reviewSchema, driverCreateSchema, expenseSchema };
+const reportIssueSchema = z.object({
+  reason: z.enum(['CLIENT_INJOIGNABLE', 'ADRESSE_INTROUVABLE', 'CLIENT_ABSENT', 'COLIS_REFUSE', 'AUTRE']),
+  note: z.string().max(500).optional(),
+});
+
+module.exports = { deliveryZoneSchema, couponSchema, reviewSchema, driverCreateSchema, driverUpdateSchema, expenseSchema, reportIssueSchema };

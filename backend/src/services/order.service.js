@@ -2,6 +2,17 @@ const prisma = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const { generateOrderNumber, generateDeliveryCode } = require('../utils/generators');
 const { getUnitPriceForQuantity, computeCouponDiscount } = require('../utils/pricing');
+const { startOfDayDouala } = require('../utils/time');
+const { assertCashAllowed } = require('./cash.service');
+const { FLAT_DELIVERY_FEE } = require('../config/delivery');
+
+// Reserve (delta > 0) ou libere (delta < 0) du stock : sur la variante si la ligne en a une, sinon sur le produit.
+async function adjustReserved(tx, item, delta) {
+  if (item.variantId) {
+    return tx.productVariant.update({ where: { id: item.variantId }, data: { reservedQuantity: { increment: delta } } });
+  }
+  return tx.product.update({ where: { id: item.productId }, data: { reservedQuantity: { increment: delta } } });
+}
 
 /**
  * Cree une commande complete (adresse, lignes, reservation de stock, paiement,
@@ -18,7 +29,7 @@ async function createOrder({
   guestPhone = null,
   addressId = null,
   newAddress = null,
-  deliveryZoneId,
+  deliveryZoneId = null,
   paymentMethod,
   paymentPhoneNumber = null,
   couponCode = null,
@@ -33,6 +44,8 @@ async function createOrder({
   if ((paymentMethod === 'MTN_MOMO' || paymentMethod === 'ORANGE_MONEY') && !paymentPhoneNumber) {
     throw new ApiError(400, 'Numero de telephone Mobile Money requis');
   }
+  // Especes : reserve aux clients avec compte ayant deja paye plus de 2 commandes par Mobile Money.
+  if (paymentMethod === 'CASH') await assertCashAllowed(customerId);
 
   // --- Client (pour la remise grossiste eventuelle) ---
   const customer = customerId ? await prisma.customerProfile.findUnique({ where: { id: customerId } }) : null;
@@ -61,37 +74,73 @@ async function createOrder({
     throw new ApiError(400, 'Adresse de livraison requise');
   }
 
-  // --- Zone de livraison ---
-  const zone = await prisma.deliveryZone.findUnique({ where: { id: deliveryZoneId } });
-  if (!zone || !zone.isActive) throw new ApiError(400, 'Zone de livraison invalide');
-  const deliveryFee = zone.fee;
+  // --- Livraison : tarif unique (FLAT_DELIVERY_FEE), la zone n'influence plus le prix ---
+  // Si une zone est transmise (anciens clients de l'API, commandes recurrentes existantes) et valide, on la garde
+  // a titre d'information ; sinon la commande n'a pas de zone.
+  let zone = null;
+  if (deliveryZoneId) {
+    zone = await prisma.deliveryZone.findUnique({ where: { id: deliveryZoneId } });
+    if (zone && !zone.isActive) zone = null;
+  }
+  const deliveryFee = FLAT_DELIVERY_FEE;
 
   // --- Lignes de commande (prix + stock recalcules cote serveur) ---
   const productIds = [...new Set(items.map((i) => i.productId))];
   const products = await prisma.product.findMany({
     where: { id: { in: productIds }, isActive: true },
-    include: { priceTiers: true },
+    include: { priceTiers: true, variants: true },
   });
+  // Prix speciaux fixes par l'administration pour ce client.
+  const specialPrices = customerId
+    ? await prisma.customerProductPrice.findMany({ where: { customerId, productId: { in: productIds } } })
+    : [];
 
   const orderItemsData = [];
   let subtotal = 0;
+  // Quantite deja demandee par produit / variante dans cette commande (une meme ligne peut etre envoyee deux fois).
+  const requested = new Map();
 
   for (const item of items) {
     const product = products.find((p) => p.id === item.productId);
     if (!product) throw new ApiError(404, `Produit introuvable ou indisponible (${item.productId})`);
-    if (item.quantity < product.minOrderQuantity) {
-      throw new ApiError(400, `Quantite minimum pour ${product.name} : ${product.minOrderQuantity}`);
-    }
-    const available = product.stockQuantity - product.reservedQuantity;
-    if (item.quantity > available) {
-      throw new ApiError(400, `Stock insuffisant pour ${product.name} (disponible : ${available})`);
+
+    const activeVariants = product.variants.filter((v) => v.isActive);
+    let variant = null;
+    let name = product.name;
+    let available;
+    let minimum;
+
+    if (activeVariants.length > 0) {
+      // Produit a variantes : le client doit choisir un poids, la quantite est un nombre de pieces entier.
+      if (!item.variantId) throw new ApiError(400, `Choisissez un poids pour ${product.name}`);
+      variant = activeVariants.find((v) => v.id === item.variantId);
+      if (!variant) throw new ApiError(400, `Ce poids n'est plus disponible pour ${product.name}`);
+      if (!Number.isInteger(item.quantity)) throw new ApiError(400, `Le nombre de pieces doit etre entier (${product.name} ${variant.label})`);
+      name = `${product.name} - ${variant.label}`;
+      available = variant.stockQuantity - variant.reservedQuantity;
+      minimum = 1;
+    } else {
+      if (item.variantId) throw new ApiError(400, `Poids invalide pour ${product.name}`);
+      available = product.stockQuantity - product.reservedQuantity;
+      minimum = product.minOrderQuantity;
     }
 
-    const unitPrice = getUnitPriceForQuantity(product, item.quantity, customer);
+    const key = `${product.id}:${variant?.id || ''}`;
+    const totalRequested = (requested.get(key) || 0) + item.quantity;
+    requested.set(key, totalRequested);
+
+    if (item.quantity < minimum) {
+      throw new ApiError(400, `Quantite minimum pour ${name} : ${minimum}`);
+    }
+    if (totalRequested > available) {
+      throw new ApiError(400, `Stock insuffisant pour ${name} (disponible : ${available})`);
+    }
+
+    const unitPrice = getUnitPriceForQuantity(product, item.quantity, customer, { variant, specialPrices });
     const total = Math.round(unitPrice * item.quantity);
     subtotal += total;
 
-    orderItemsData.push({ productId: product.id, name: product.name, unitPrice, quantity: item.quantity, total });
+    orderItemsData.push({ productId: product.id, variantId: variant?.id || null, name, unitPrice, quantity: item.quantity, total });
   }
 
   // --- Coupon ---
@@ -110,10 +159,8 @@ async function createOrder({
 
   const total = subtotal + deliveryFee - discount;
 
-  // --- Numero de commande sequentiel (base sur le nombre de commandes du jour) ---
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  const todaysCount = await prisma.order.count({ where: { createdAt: { gte: startOfDay } } });
+  // --- Numero de commande sequentiel (base sur le nombre de commandes du jour, a l'heure de Douala) ---
+  const todaysCount = await prisma.order.count({ where: { createdAt: { gte: startOfDayDouala() } } });
   const orderNumber = generateOrderNumber(todaysCount + 1);
 
   const order = await prisma.$transaction(async (tx) => {
@@ -124,7 +171,7 @@ async function createOrder({
         guestName: customerId ? null : guestName,
         guestPhone: customerId ? null : guestPhone,
         addressId: address.id,
-        deliveryZoneId: zone.id,
+        deliveryZoneId: zone?.id || null,
         couponId: coupon?.id,
         originRecurringOrderId,
         subtotal,
@@ -139,9 +186,9 @@ async function createOrder({
     });
 
     for (const item of orderItemsData) {
-      await tx.product.update({ where: { id: item.productId }, data: { reservedQuantity: { increment: item.quantity } } });
+      await adjustReserved(tx, item, item.quantity);
       await tx.stockMovement.create({
-        data: { productId: item.productId, type: 'RESERVED', quantity: item.quantity, reason: `Commande ${orderNumber}` },
+        data: { productId: item.productId, type: 'RESERVED', quantity: item.quantity, reason: `Commande ${orderNumber}${item.variantId ? ` (${item.name})` : ''}` },
       });
     }
 
@@ -176,7 +223,7 @@ async function createOrder({
 async function releaseStock(tx, order) {
   const orderItems = await tx.orderItem.findMany({ where: { orderId: order.id } });
   for (const item of orderItems) {
-    await tx.product.update({ where: { id: item.productId }, data: { reservedQuantity: { decrement: item.quantity } } });
+    await adjustReserved(tx, item, -item.quantity);
     await tx.stockMovement.create({
       data: { productId: item.productId, type: 'RELEASED', quantity: item.quantity, reason: `Annulation ${order.orderNumber}` },
     });
@@ -188,10 +235,17 @@ async function releaseStock(tx, order) {
 async function finalizeDelivery(tx, order) {
   const orderItems = await tx.orderItem.findMany({ where: { orderId: order.id } });
   for (const item of orderItems) {
-    await tx.product.update({
-      where: { id: item.productId },
-      data: { stockQuantity: { decrement: item.quantity }, reservedQuantity: { decrement: item.quantity } },
-    });
+    if (item.variantId) {
+      await tx.productVariant.update({
+        where: { id: item.variantId },
+        data: { stockQuantity: { decrement: item.quantity }, reservedQuantity: { decrement: item.quantity } },
+      });
+    } else {
+      await tx.product.update({
+        where: { id: item.productId },
+        data: { stockQuantity: { decrement: item.quantity }, reservedQuantity: { decrement: item.quantity } },
+      });
+    }
     await tx.stockMovement.create({
       data: { productId: item.productId, type: 'OUT', quantity: item.quantity, reason: `Livraison ${order.orderNumber}` },
     });

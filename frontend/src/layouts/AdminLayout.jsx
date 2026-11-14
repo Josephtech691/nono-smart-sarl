@@ -147,7 +147,7 @@ export default function AdminLayout() {
             </button>
           </div>
         </header>
-        <main className="flex-1 p-4 pb-28 sm:p-6 md:pb-6">
+        <main className="min-w-0 max-w-full flex-1 overflow-x-clip p-4 pb-28 sm:p-6 md:pb-6">
           <Outlet />
         </main>
       </div>

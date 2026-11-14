@@ -1,9 +1,12 @@
-// Genere un numero de commande du type CMD-20260810-0001
+const { DOUALA_OFFSET_MS } = require('./time');
+
+// Genere un numero de commande du type CMD-20260810-0001 : la date est celle de Douala (le serveur
+// tourne en UTC : une commande passee a 0 h 30 a Douala porterait sinon la date de la veille).
 function generateOrderNumber(sequence) {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
+  const local = new Date(Date.now() + DOUALA_OFFSET_MS);
+  const y = local.getUTCFullYear();
+  const m = String(local.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(local.getUTCDate()).padStart(2, '0');
   const seq = String(sequence).padStart(4, '0');
   return `CMD-${y}${m}${d}-${seq}`;
 }

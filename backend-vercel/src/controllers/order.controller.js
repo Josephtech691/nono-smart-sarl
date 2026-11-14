@@ -386,6 +386,70 @@ const updateStatus = asyncHandler(async (req, res) => {
   res.json(updated);
 });
 
+// POST /api/orders/:id/force-deliver (admin) - cas EXCEPTIONNEL : le livreur n'a pas pu saisir le code du client
+// (empêchement) et présente des preuves (vidéo, photo...) à l'administration. Si elles sont jugées valables,
+// l'administration valide la livraison. Un motif est obligatoire ; il est conservé dans l'historique de la commande.
+const FORCE_DELIVER_FROM = ['ASSIGNED', 'PICKED_UP', 'ON_DELIVERY'];
+const forceDeliver = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason, cashReceived } = req.body;
+
+  const order = await prisma.order.findUnique({ where: { id }, include: { payment: true, delivery: true } });
+  if (!order) throw new ApiError(404, 'Commande introuvable');
+  if (order.status === 'DELIVERED') throw new ApiError(400, 'Cette commande est deja livree');
+  if (!FORCE_DELIVER_FROM.includes(order.status) || !order.delivery) {
+    throw new ApiError(400, 'Seule une commande assignee a un livreur et en cours de livraison peut etre validee comme livree');
+  }
+
+  // Espèces : si le livreur a encaissé, l'administration indique le montant ; sinon le paiement reste a regler.
+  const isCash = order.payment?.method === 'CASH' && order.payment?.status !== 'PAID';
+  const received = isCash && cashReceived != null ? Math.max(0, Math.round(Number(cashReceived) || 0)) : null;
+  const cashComplete = isCash && received != null && received >= order.total;
+  const adminName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'administrateur';
+
+  await prisma.$transaction(async (tx) => {
+    await tx.order.update({ where: { id }, data: { status: 'DELIVERED' } });
+    await orderService.finalizeDelivery(tx, order);
+    await tx.delivery.update({
+      where: { orderId: id },
+      data: { status: 'DELIVERED', deliveredAt: new Date(), ...(received != null ? { cashReceived: received } : {}) },
+    });
+    await tx.orderStatusHistory.create({
+      data: { orderId: id, status: 'DELIVERED', note: `Livraison validee par l'administration (${adminName}) sans code client. Motif : ${reason}` },
+    });
+    if (isCash && cashComplete) await tx.payment.update({ where: { orderId: id }, data: { status: 'PAID' } });
+  });
+
+  const updated = await getOrderFull(id);
+  const phone = contactOf(updated);
+
+  if (order.customerId || order.guestPhone) {
+    await notify({
+      userId: updated.customer?.userId,
+      audience: 'CUSTOMER',
+      title: 'Commande livrée',
+      message: `Votre commande ${order.orderNumber} a été livrée. Merci !`,
+      link: `/compte/commandes/${id}`,
+      phone,
+      sms: true,
+    });
+  }
+  const driverProfile = order.delivery.driverId
+    ? await prisma.driverProfile.findUnique({ where: { id: order.delivery.driverId } })
+    : null;
+  if (driverProfile) {
+    await notify({
+      userId: driverProfile.userId,
+      audience: 'DRIVER',
+      title: 'Livraison validée',
+      message: `L'administration a validé la livraison de la commande ${order.orderNumber}.`,
+      link: `/livreur/livraisons/${id}`,
+    });
+  }
+
+  res.json(updated);
+});
+
 // POST /api/orders/:id/assign-driver (admin) - assignation manuelle
 const assignDriver = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -533,6 +597,7 @@ module.exports = {
   getOrder,
   trackOrder,
   updateStatus,
+  forceDeliver,
   assignDriver,
   autoAssignDriver,
   cancelOrder,

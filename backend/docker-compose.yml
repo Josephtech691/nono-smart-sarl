@@ -5,9 +5,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: nono
-      POSTGRES_PASSWORD: nono
-      POSTGRES_DB: nono_smart
+      POSTGRES_USER: fresh
+      POSTGRES_PASSWORD: fresh
+      POSTGRES_DB: fresh_fish
     ports:
       - "5432:5432"
     volumes:

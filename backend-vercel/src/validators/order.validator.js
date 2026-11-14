@@ -53,4 +53,10 @@ const updateStatusSchema = z.object({
   driverId: z.string().min(1).optional(),
 });
 
-module.exports = { addressInputSchema, createOrderSchema, updateStatusSchema };
+// Validation exceptionnelle « livrée » par l'administration : un motif (preuves vues) est obligatoire.
+const forceDeliverSchema = z.object({
+  reason: z.string().trim().min(5, 'Indiquez le motif et les preuves vues (5 caracteres minimum)').max(500),
+  cashReceived: z.number().min(0).optional().nullable(),
+});
+
+module.exports = { addressInputSchema, createOrderSchema, updateStatusSchema, forceDeliverSchema };

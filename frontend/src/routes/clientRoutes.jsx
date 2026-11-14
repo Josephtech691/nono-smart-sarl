@@ -13,6 +13,7 @@ import About from '../pages/About';
 import Delivery from '../pages/Delivery';
 import Terms from '../pages/Terms';
 import Privacy from '../pages/Privacy';
+import DeleteAccountInfo from '../pages/DeleteAccountInfo';
 import NotFound from '../pages/NotFound';
 import Login from '../pages/account/Login';
 import Register from '../pages/account/Register';
@@ -48,6 +49,7 @@ export function clientRoutes() {
       <Route path="/mot-de-passe-oublie" element={<ForgotPassword />} />
       <Route path="/conditions-generales" element={<Terms />} />
       <Route path="/confidentialite" element={<Privacy />} />
+      <Route path="/suppression-compte" element={<DeleteAccountInfo />} />
 
       <Route path="/compte" element={<ProtectedRoute role="CUSTOMER"><AccountDashboard /></ProtectedRoute>} />
       <Route path="/compte/profil" element={<ProtectedRoute role="CUSTOMER"><Profile /></ProtectedRoute>} />

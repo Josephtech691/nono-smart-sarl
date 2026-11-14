@@ -2,6 +2,7 @@ const prisma = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { computeNextRunAt } = require('../utils/generators');
+const { assertCashAllowed } = require('../services/cash.service');
 
 // GET /api/recurring-orders (mine)
 const listMine = asyncHandler(async (req, res) => {
@@ -19,12 +20,11 @@ const create = asyncHandler(async (req, res) => {
 
   if (!Array.isArray(items) || items.length === 0) throw new ApiError(400, 'Le panier de la commande recurrente est vide');
 
-  const [address, zone] = await Promise.all([
-    prisma.address.findUnique({ where: { id: addressId } }),
-    prisma.deliveryZone.findUnique({ where: { id: deliveryZoneId } }),
-  ]);
+  const address = await prisma.address.findUnique({ where: { id: addressId } });
   if (!address || address.customerId !== req.customerProfile.id) throw new ApiError(400, 'Adresse invalide');
-  if (!zone || !zone.isActive) throw new ApiError(400, 'Zone de livraison invalide');
+  // Livraison a tarif unique : la zone est facultative (conservee seulement si elle existe).
+  const zone = deliveryZoneId ? await prisma.deliveryZone.findUnique({ where: { id: deliveryZoneId } }) : null;
+  if (paymentMethod === 'CASH') await assertCashAllowed(req.customerProfile.id);
 
   const recurring = await prisma.recurringOrder.create({
     data: {
@@ -32,7 +32,7 @@ const create = asyncHandler(async (req, res) => {
       label,
       items,
       addressId,
-      deliveryZoneId,
+      deliveryZoneId: zone?.id || null,
       paymentMethod,
       frequency,
       nextRunAt: startDate ? new Date(startDate) : computeNextRunAt(frequency),

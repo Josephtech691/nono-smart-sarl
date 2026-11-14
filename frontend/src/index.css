@@ -19,6 +19,10 @@
 }
 
 @layer components {
+  /* Une grille sans colonnes explicites n'a qu'une colonne « minmax(0, 1fr) » : un contenu large (graphique,
+     tableau, texte long) ne peut plus agrandir toute la page ; il reste dans sa carte (et défile dedans si besoin). */
+  .grid { grid-template-columns: minmax(0, 1fr); }
+
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand-600 px-6 py-3
            font-display font-semibold text-white transition hover:bg-brand-700

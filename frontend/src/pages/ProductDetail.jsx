@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Fish, Heart, Check, Share2, ChevronRight, Leaf, BadgeCheck, Truck, BadgePercent, ShieldCheck, Star,
+  ShoppingCart,
 } from 'lucide-react';
 import { productsApi } from '../api/catalog';
 import { favoritesApi } from '../api/extras';
-import { useCartStore } from '../store/cartStore';
+import { useCartStore, buildLine } from '../store/cartStore';
 import { useAuthStore } from '../store/authStore';
 import { usePricesStore } from '../store/pricesStore';
 import { activeVariants, availableStock, variantAvailable } from '../utils/products';
@@ -39,6 +40,7 @@ export default function ProductDetail() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const addItem = useCartStore((s) => s.addItem);
+  const startDirectMany = useCartStore((s) => s.startDirectMany);
 
   const [product, setProduct] = useState(null);
   const [loadError, setLoadError] = useState(false);
@@ -153,6 +155,21 @@ export default function ProductDetail() {
     toast.success(`${product.name} ajouté au panier`);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
+  };
+
+  // « Commander maintenant » : même contrôles que l'ajout au panier, mais on commande directement,
+  // sans passer par le panier (qui reste inchangé).
+  const handleBuyNow = () => {
+    setError('');
+    if (hasVar) {
+      if (totalPieces === 0) return setError('Indiquez le nombre de pièces pour au moins un poids.');
+      startDirectMany(chosen.map((v) => buildLine(product, variantQty[v.id], v)));
+    } else {
+      if (quantity < product.minOrderQuantity) return setError(`Quantité minimum : ${qtyWithUnit(product.minOrderQuantity)}`);
+      if (quantity > available) return setError(`Stock disponible : ${qtyWithUnit(available)}`);
+      startDirectMany([buildLine(product, quantity)]);
+    }
+    navigate('/checkout');
   };
 
   const toggleFavorite = async () => {
@@ -385,9 +402,14 @@ export default function ProductDetail() {
 
           {error && <p role="alert" className="mt-2 text-sm text-red-600">{error}</p>}
 
-          <button onClick={handleAdd} disabled={hasVar ? available < 1 : available < (product.minOrderQuantity || 1)} className="btn-primary mt-5 w-full">
-            {added ? (<><Check size={17} /> Ajouté au panier</>) : 'Ajouter au panier'}
-          </button>
+          <div className="mt-5 grid gap-2 sm:grid-cols-2">
+            <button onClick={handleBuyNow} disabled={hasVar ? available < 1 : available < (product.minOrderQuantity || 1)} className="btn-primary w-full">
+              Commander maintenant
+            </button>
+            <button onClick={handleAdd} disabled={hasVar ? available < 1 : available < (product.minOrderQuantity || 1)} className="btn-secondary w-full">
+              {added ? (<><Check size={17} /> Ajouté au panier</>) : (<><ShoppingCart size={17} /> Ajouter au panier</>)}
+            </button>
+          </div>
 
           <ul className="mt-5 grid grid-cols-3 gap-2 border-y border-line py-4 text-center text-xs font-medium text-ink/70 sm:text-sm">
             {FEATURES.map(({ icon: Icon, label }) => (

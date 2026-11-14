@@ -1,5 +1,6 @@
 const prisma = require('../config/db');
 const asyncHandler = require('../utils/asyncHandler');
+const { createdAtRange } = require('../utils/orderSearch');
 
 // Gestion des depenses + estimation du benefice (section 51)
 const listExpenses = asyncHandler(async (req, res) => {
@@ -21,17 +22,15 @@ const deleteExpense = asyncHandler(async (req, res) => {
 
 // GET /api/expenses/profit-estimate?from=&to=
 const profitEstimate = asyncHandler(async (req, res) => {
-  const { from, to } = req.query;
-  const range = {};
-  if (from) range.gte = new Date(from);
-  if (to) range.lte = new Date(to);
+  // Dates « AAAA-MM-JJ » (jours de Douala) ; la date de fin inclut toute la journee.
+  const range = createdAtRange(req.query.from, req.query.to);
 
   const [orders, expenses] = await Promise.all([
     prisma.order.findMany({
-      where: { status: { not: 'CANCELLED' }, ...(from || to ? { createdAt: range } : {}) },
+      where: { status: { not: 'CANCELLED' }, ...(range ? { createdAt: range } : {}) },
       select: { subtotal: true, deliveryFee: true, total: true },
     }),
-    prisma.expense.findMany({ where: from || to ? { incurredAt: range } : undefined }),
+    prisma.expense.findMany({ where: range ? { incurredAt: range } : undefined }),
   ]);
 
   const revenue = orders.reduce((s, o) => s + o.total, 0);

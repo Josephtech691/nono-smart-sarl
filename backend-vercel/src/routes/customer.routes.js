@@ -11,6 +11,7 @@ router.patch('/me/professional-request', requireAuth, requireRole('CUSTOMER'), c
 router.get('/', requireAuth, requireRole('ADMIN'), ctrl.listCustomers);
 router.get('/:id', requireAuth, requireRole('ADMIN'), ctrl.getCustomer);
 router.patch('/:id/professional-status', requireAuth, requireRole('ADMIN'), ctrl.updateProfessionalStatus);
+router.patch('/:id/active', requireAuth, requireRole('ADMIN'), ctrl.setCustomerActive);
 router.get('/:id/prices', requireAuth, requireRole('ADMIN'), ctrl.listCustomerPrices);
 router.put('/:id/prices', requireAuth, requireRole('ADMIN'), validate(customerPriceSchema), ctrl.setCustomerPrice);
 router.delete('/:id/prices/:priceId', requireAuth, requireRole('ADMIN'), ctrl.deleteCustomerPrice);

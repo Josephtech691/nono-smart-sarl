@@ -1,6 +1,7 @@
 const prisma = require('../config/db');
 const { sendSms } = require('../integrations/sms');
 const { sendWhatsAppMessage } = require('../integrations/whatsapp');
+const { sendPush } = require('../services/push.service');
 
 // Cree une notification en base (centre de notifications in-app), et
 // declenche en plus un SMS et/ou un message WhatsApp si demande (section 40,
@@ -18,6 +19,16 @@ async function notify({ userId = null, audience, title, message, link = null, ph
       });
     } catch (err) {
       console.error('[notify] echec de creation de notification', err.message);
+    }
+
+    // Push vers le(s) telephone(s) : le destinataire, ou tous les administrateurs actifs.
+    try {
+      const userIds = userId
+        ? [userId]
+        : (await prisma.user.findMany({ where: { role: 'ADMIN', isActive: true }, select: { id: true } })).map((u) => u.id);
+      await sendPush({ userIds, title, message, link });
+    } catch (err) {
+      console.error('[notify:push]', err.message);
     }
   }
 

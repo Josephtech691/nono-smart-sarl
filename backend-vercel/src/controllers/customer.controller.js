@@ -144,6 +144,26 @@ const myReferral = asyncHandler(async (req, res) => {
   });
 });
 
+// PATCH /api/customers/:id/active (admin) - active ou desactive le compte d'un client.
+// Un compte desactive ne peut plus se connecter (la session en cours est aussi refusee) ni recevoir de notifications push.
+const setCustomerActive = asyncHandler(async (req, res) => {
+  const { isActive } = req.body || {};
+  if (typeof isActive !== 'boolean') throw new ApiError(400, 'Valeur invalide');
+  const customer = await prisma.customerProfile.findUnique({ where: { id: req.params.id }, include: { user: true } });
+  if (!customer) throw new ApiError(404, 'Client introuvable');
+  if (customer.user.phone.startsWith('deleted-')) throw new ApiError(400, 'Ce compte a ete supprime par le client');
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: customer.userId }, data: { isActive } }),
+    ...(isActive ? [] : [prisma.deviceToken.deleteMany({ where: { userId: customer.userId } })]),
+  ]);
+  const updated = await prisma.customerProfile.findUnique({
+    where: { id: customer.id },
+    include: { user: { select: SAFE_USER_SELECT }, _count: { select: { orders: true } } },
+  });
+  res.json(updated);
+});
+
 // ---------------------------------------------------------------------------
 // Prix speciaux par client : l'administration fixe un prix pour UN client et UN produit (ou une variante). Ce prix
 // remplace les paliers degressifs et la remise grossiste, quelle que soit la quantite commandee.
@@ -208,4 +228,4 @@ const deleteCustomerPrice = asyncHandler(async (req, res) => {
   res.json({ message: 'Prix special supprime' });
 });
 
-module.exports = { listCustomers, getCustomer, requestProfessionalStatus, updateProfessionalStatus, resetCustomerPassword, myReferral, myPrices, listCustomerPrices, setCustomerPrice, deleteCustomerPrice };
+module.exports = { listCustomers, getCustomer, requestProfessionalStatus, updateProfessionalStatus, resetCustomerPassword, setCustomerActive, myReferral, myPrices, listCustomerPrices, setCustomerPrice, deleteCustomerPrice };

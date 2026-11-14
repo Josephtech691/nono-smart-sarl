@@ -6,6 +6,8 @@ export const ordersApi = {
   get: (id) => api.get(`/orders/${id}`).then((r) => r.data),
   track: (orderNumber, phone) => api.get(`/orders/track/${orderNumber}`, { params: { phone } }).then((r) => r.data),
   updateStatus: (id, data) => api.patch(`/orders/${id}/status`, data).then((r) => r.data),
+  // Exceptionnel : l'admin valide la livraison quand le livreur n'a pas pu saisir le code (motif obligatoire).
+  forceDeliver: (id, data) => api.post(`/orders/${id}/force-deliver`, data).then((r) => r.data),
   assignDriver: (id, driverId) => api.post(`/orders/${id}/assign-driver`, { driverId }).then((r) => r.data),
   autoAssignDriver: (id) => api.post(`/orders/${id}/auto-assign-driver`).then((r) => r.data),
   cancel: (id, reason) => api.post(`/orders/${id}/cancel`, { reason }).then((r) => r.data),

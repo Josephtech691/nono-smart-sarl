@@ -1,0 +1,24 @@
+{
+  "appId": "cm.freshfish.client",
+  "appName": "Fresh Fish",
+  "webDir": "www",
+  "backgroundColor": "#FAFAF7",
+  "android": {
+    "allowMixedContent": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "backgroundColor": "#FAFAF7",
+      "androidScaleType": "CENTER_INSIDE",
+      "showSpinner": false
+    },
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_notify",
+      "iconColor": "#0F3D2C"
+    },
+    "PushNotifications": {
+      "presentationOptions": []
+    }
+  }
+}

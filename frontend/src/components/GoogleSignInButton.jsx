@@ -35,7 +35,14 @@ function loadGsi() {
  * - Le jeton recu est envoye au backend (POST /auth/google) qui le verifie
  *   aupres de Google : on ne fait jamais confiance au navigateur seul.
  */
+// Google refuse la connexion dans une WebView (application Android) : le bouton n'y est pas affiché,
+// le client se connecte avec son téléphone / e-mail et son mot de passe.
 export default function GoogleSignInButton() {
+  if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) return null;
+  return <GoogleSignInButtonInner />;
+}
+
+function GoogleSignInButtonInner() {
   const containerRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);

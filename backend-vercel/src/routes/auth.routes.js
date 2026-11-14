@@ -19,6 +19,7 @@ router.post('/forgot-password', validate(forgotPasswordSchema), ctrl.forgotPassw
 router.post('/reset-password', validate(resetPasswordSchema), ctrl.resetPassword);
 router.get('/me', requireAuth, ctrl.me);
 router.patch('/me', requireAuth, validate(updateMeSchema), ctrl.updateMe);
+router.delete('/me', requireAuth, ctrl.deleteMe);
 router.patch('/me/password', requireAuth, validate(changePasswordSchema), ctrl.changePassword);
 
 module.exports = router;

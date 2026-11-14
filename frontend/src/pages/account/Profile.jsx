@@ -6,6 +6,7 @@ import { useAuthStore } from '../../store/authStore';
 import { authApi } from '../../api/auth';
 import { toast } from '../../store/toastStore';
 import AccountBack from '../../components/AccountBack';
+import DeleteAccountCard from '../../components/DeleteAccountCard';
 
 const PENDING_PREFIX = 'google-pending-';
 
@@ -145,6 +146,8 @@ export default function Profile() {
               {pwdBusy ? 'Mise à jour...' : 'Mettre à jour'}
             </button>
           </form>
+
+          <DeleteAccountCard />
         </div>
 
         <aside className="space-y-5">

@@ -33,9 +33,13 @@ async function findBestDriver(client = prisma) {
  * une transaction en cours.
  */
 async function performAssignment(tx, orderId, driverId) {
+  const previous = await tx.delivery.findUnique({ where: { orderId } });
+  const isRetry = previous?.status === 'FAILED';
   await tx.delivery.update({ where: { orderId }, data: { driverId, status: 'ASSIGNED', assignedAt: new Date() } });
   await tx.order.update({ where: { id: orderId }, data: { status: 'ASSIGNED' } });
-  await tx.orderStatusHistory.create({ data: { orderId, status: 'ASSIGNED', note: 'Livreur assigne' } });
+  await tx.orderStatusHistory.create({
+    data: { orderId, status: 'ASSIGNED', note: isRetry ? 'Livraison relancee apres un probleme signale' : 'Livreur assigne' },
+  });
 }
 
 module.exports = { findBestDriver, performAssignment };

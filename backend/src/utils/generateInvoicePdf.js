@@ -18,7 +18,7 @@ function generateInvoicePdf(order, res) {
   doc.pipe(res);
 
   // En-tete
-  doc.fillColor(BRAND_GREEN).fontSize(20).font('Helvetica-Bold').text('NONO SMART SARL');
+  doc.fillColor(BRAND_GREEN).fontSize(20).font('Helvetica-Bold').text('Fresh Fish');
   doc.fillColor(MUTED).fontSize(9).font('Helvetica').text('Essos Madison, Yaoundé — Cameroun');
   doc.text('Tél : 659 103 000 · WhatsApp : 674 331 099');
 
@@ -88,7 +88,7 @@ function generateInvoicePdf(order, res) {
     740,
     { width: 495, align: 'center' }
   );
-  doc.text('Merci pour votre confiance — NONO SMART SARL', 50, 755, { width: 495, align: 'center' });
+  doc.text('Merci pour votre confiance — Fresh Fish', 50, 755, { width: 495, align: 'center' });
 
   doc.end();
 }

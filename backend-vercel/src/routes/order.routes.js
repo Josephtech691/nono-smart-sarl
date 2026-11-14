@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const validate = require('../middlewares/validate.middleware');
 const { requireAuth, requireRole, optionalAuth } = require('../middlewares/auth.middleware');
-const { createOrderSchema, updateStatusSchema } = require('../validators/order.validator');
+const { createOrderSchema, updateStatusSchema, forceDeliverSchema } = require('../validators/order.validator');
 const { reviewSchema } = require('../validators/misc.validator');
 const ctrl = require('../controllers/order.controller');
 const reviewCtrl = require('../controllers/review.controller');
@@ -22,6 +22,7 @@ router.get('/export.csv', requireAuth, requireRole('ADMIN'), ctrl.exportOrders);
 router.get('/:id', requireAuth, requireRole('ADMIN', 'CUSTOMER'), ctrl.getOrder);
 router.get('/:id/invoice.pdf', requireAuth, requireRole('ADMIN', 'CUSTOMER'), ctrl.downloadInvoice);
 router.patch('/:id/status', requireAuth, requireRole('ADMIN'), validate(updateStatusSchema), ctrl.updateStatus);
+router.post('/:id/force-deliver', requireAuth, requireRole('ADMIN'), validate(forceDeliverSchema), ctrl.forceDeliver);
 router.post('/:id/assign-driver', requireAuth, requireRole('ADMIN'), ctrl.assignDriver);
 router.post('/:id/auto-assign-driver', requireAuth, requireRole('ADMIN'), ctrl.autoAssignDriver);
 router.post('/:id/cancel', requireAuth, requireRole('ADMIN', 'CUSTOMER'), ctrl.cancelOrder);

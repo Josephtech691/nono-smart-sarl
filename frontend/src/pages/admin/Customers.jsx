@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BadgeCheck, BadgeDollarSign, Building2, KeyRound, Users } from 'lucide-react';
+import { BadgeCheck, BadgeDollarSign, Building2, KeyRound, Power, Users } from 'lucide-react';
 import { customersApi } from '../../api/customers';
 import EmptyState from '../../components/EmptyState';
 import { RowSkeleton } from '../../components/Skeleton';
@@ -59,6 +59,8 @@ function StatusCell({ customer }) {
   );
 }
 
+const isDeleted = (customer) => String(customer.user?.phone || '').startsWith('deleted-');
+
 function Identity({ customer }) {
   return (
     <div className="min-w-0">
@@ -66,12 +68,18 @@ function Identity({ customer }) {
       {customer.businessName && <p className="text-xs text-ink/55">{customer.businessName}</p>}
       {customer.user.email && <p className="truncate text-xs text-ink/45">{customer.user.email}</p>}
       {googleOnly(customer) && <span className="badge mt-1 bg-mist text-ink/60">Connecté avec Google</span>}
+      {isDeleted(customer) ? (
+        <span className="badge ml-1 mt-1 bg-ink/10 text-ink/70">Compte supprimé</span>
+      ) : (
+        !customer.user.isActive && <span className="badge ml-1 mt-1 bg-red-100 text-red-700">Compte désactivé</span>
+      )}
     </div>
   );
 }
 
-function Actions({ customer, onReview, onReset, onPrices }) {
+function Actions({ customer, onReview, onReset, onPrices, onToggle }) {
   const name = customerName(customer);
+  if (isDeleted(customer)) return <p className="text-xs text-ink/45">Supprimé par le client</p>;
   return (
     <div className="flex flex-wrap items-center gap-2 md:justify-end">
       {customer.professionalStatus === 'PENDING' && (
@@ -81,6 +89,15 @@ function Actions({ customer, onReview, onReset, onPrices }) {
       )}
       <button type="button" data-action="prices" onClick={() => onPrices(customer)} aria-label={`Prix négociés de ${name}`} className="btn-secondary !px-3 !py-1.5 text-xs">
         <BadgeDollarSign size={14} aria-hidden="true" /> Prix
+      </button>
+      <button
+        type="button"
+        data-action="toggle-active"
+        onClick={() => onToggle(customer)}
+        aria-label={`${customer.user.isActive ? 'Désactiver' : 'Activer'} le compte de ${name}`}
+        className={`btn-secondary !px-3 !py-1.5 text-xs ${customer.user.isActive ? '!border-red-300 !text-red-700 hover:!bg-red-50' : '!border-brand-600 !text-brand-700'}`}
+      >
+        <Power size={14} aria-hidden="true" /> {customer.user.isActive ? 'Désactiver' : 'Activer'}
       </button>
       {!googleOnly(customer) && (
         <button type="button" data-action="reset" onClick={() => onReset(customer)} aria-label={`Réinitialiser le mot de passe de ${name}`} className="btn-secondary !px-3 !py-1.5 text-xs">
@@ -112,6 +129,21 @@ export default function AdminCustomers() {
   const [reviewError, setReviewError] = useState('');
   const [resetTarget, setResetTarget] = useState(null);
   const [pricesTarget, setPricesTarget] = useState(null);
+
+  // Active / désactive le compte d'un client (un compte désactivé ne peut plus se connecter).
+  const toggleActive = async (customer) => {
+    const next = !customer.user.isActive;
+    const name = customerName(customer);
+    const ok = window.confirm(next ? `Réactiver le compte de ${name} ?` : `Désactiver le compte de ${name} ? Il ne pourra plus se connecter ni recevoir de notifications.`);
+    if (!ok) return;
+    try {
+      await customersApi.setActive(customer.id, next);
+      toast.success(next ? 'Compte activé' : 'Compte désactivé');
+      reload();
+    } catch (err) {
+      toast.error(err.message || 'Action impossible');
+    }
+  };
 
   const items = data?.items || [];
   const total = data?.total || 0;
@@ -231,7 +263,7 @@ export default function AdminCustomers() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-ink/55">{formatDay(c.createdAt)}</td>
                       <td className="px-4 py-3">
-                        <Actions customer={c} onReview={openReview} onReset={openReset} onPrices={setPricesTarget} />
+                        <Actions customer={c} onReview={openReview} onReset={openReset} onPrices={setPricesTarget} onToggle={toggleActive} />
                       </td>
                     </tr>
                   ))}
@@ -258,7 +290,7 @@ export default function AdminCustomers() {
                   </div>
                   <p className="mt-2 text-xs text-ink/45">Inscrit le {formatDay(c.createdAt)}</p>
                   <div className="mt-3 border-t border-line pt-3">
-                    <Actions customer={c} onReview={openReview} onReset={openReset} onPrices={setPricesTarget} />
+                    <Actions customer={c} onReview={openReview} onReset={openReset} onPrices={setPricesTarget} onToggle={toggleActive} />
                   </div>
                 </li>
               ))}

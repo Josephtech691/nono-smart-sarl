@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { authApi } from '../api/auth';
+import { setUnauthorizedHandler } from '../api/client';
 import { getToken, setToken, clearToken } from '../utils/tokenStorage';
 
 export const useAuthStore = create((set, get) => ({
@@ -66,3 +67,9 @@ export const useAuthStore = create((set, get) => ({
     set({ user: null });
   },
 }));
+
+// Session expirée en cours d'utilisation : déconnexion immédiate, les routes protégées redirigent vers la connexion.
+setUnauthorizedHandler(() => {
+  clearToken();
+  useAuthStore.setState({ user: null });
+});

@@ -35,6 +35,15 @@ function ClickHandler({ onPick }) {
   return null;
 }
 
+// Recentre la carte sur `center` (zoom rapproché) à chaque changement de `focus` : appui sur « Ma position GPS ».
+function Focus({ center, focus }) {
+  const map = useMap();
+  useEffect(() => {
+    if (focus) map.setView(center, 17, { animate: true });
+  }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 function FitBounds({ points }) {
   const map = useMap();
   useEffect(() => {
@@ -49,7 +58,7 @@ function FitBounds({ points }) {
  * markers: [{ position: [lat, lng], label?: string, color?: 'brand'|'pine'|'amber' }]
  * onPick: si fourni, un clic sur la carte appelle onPick({ latitude, longitude })
  */
-export default function MapView({ center = YAOUNDE_CENTER, zoom = 13, markers = [], onPick, height = 280, className = '' }) {
+export default function MapView({ center = YAOUNDE_CENTER, zoom = 13, markers = [], onPick, height = 280, className = '', focus = 0, draggableMarker = false }) {
   const points = useMemo(() => markers.map((m) => m.position), [markers]);
 
   return (
@@ -61,8 +70,15 @@ export default function MapView({ center = YAOUNDE_CENTER, zoom = 13, markers = 
         />
         {onPick && <ClickHandler onPick={onPick} />}
         {points.length > 1 && <FitBounds points={points} />}
+        {focus > 0 && <Focus center={center} focus={focus} />}
         {markers.map((m, i) => (
-          <Marker key={i} position={m.position} icon={pinIcon(m.color)}>
+          <Marker
+            key={i}
+            position={m.position}
+            icon={pinIcon(m.color)}
+            draggable={Boolean(draggableMarker && onPick)}
+            eventHandlers={draggableMarker && onPick ? { dragend: (e) => { const ll = e.target.getLatLng(); onPick({ latitude: ll.lat, longitude: ll.lng }); } } : undefined}
+          >
             {m.label && <Popup>{m.label}</Popup>}
           </Marker>
         ))}

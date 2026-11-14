@@ -1,6 +1,6 @@
 const router = require('express').Router();
 
-router.get('/health', (req, res) => res.json({ status: 'ok', service: 'nono-smart-api', time: new Date().toISOString() }));
+router.get('/health', (req, res) => res.json({ status: 'ok', service: 'fresh-fish-api', time: new Date().toISOString() }));
 
 router.use('/auth', require('./auth.routes'));
 router.use('/categories', require('./category.routes'));
@@ -15,6 +15,7 @@ router.use('/reviews', require('./review.routes'));
 router.use('/favorites', require('./favorite.routes'));
 router.use('/coupons', require('./coupon.routes'));
 router.use('/notifications', require('./notification.routes'));
+router.use('/devices', require('./device.routes'));
 router.use('/expenses', require('./expense.routes'));
 router.use('/recurring-orders', require('./recurringOrder.routes'));
 router.use('/customers', require('./customer.routes'));

@@ -17,7 +17,8 @@ export default function bootstrap(App, target = 'all') {
   );
 
   // PWA : enregistre le service worker en production uniquement (pas de gêne pour le hot-reload de Vite).
-  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  // (Pas dans l'application Android : son contenu est déjà embarqué.)
+  if ('serviceWorker' in navigator && import.meta.env.PROD && !window.Capacitor?.isNativePlatform?.()) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     });

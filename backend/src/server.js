@@ -14,7 +14,7 @@ if (missing.length) {
 }
 
 const server = app.listen(PORT, () => {
-  console.log(`API NONO SMART demarree sur le port ${PORT} (${process.env.NODE_ENV || 'development'})`);
+  console.log(`API Fresh Fish demarree sur le port ${PORT} (${process.env.NODE_ENV || 'development'})`);
   scheduleRecurringOrdersJob();
 });
 

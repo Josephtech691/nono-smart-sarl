@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import usePaymentConfig from '../hooks/usePaymentConfig';
 import { PaymentLogo } from '../components/PaymentLogos';
-import { useCartStore, lineKey, orderLines } from '../store/cartStore';
+import { useCartStore, lineKey, orderLines, subtotalOf } from '../store/cartStore';
 import { usePricesStore } from '../store/pricesStore';
 import { useAuthStore } from '../store/authStore';
 import { addressesApi } from '../api/logistics';
@@ -103,7 +103,10 @@ function SectionCard({ title, subtitle, children }) {
 export default function Checkout() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { items, subtotal, clear } = useCartStore();
+  const { items: cartItems, direct, clear, clearDirect } = useCartStore();
+  // « Commander » directement depuis un produit : on commande uniquement cette ligne, le panier reste intact.
+  const isDirect = Array.isArray(direct) && direct.length > 0;
+  const items = isDirect ? direct : cartItems;
   const customer = user?.customerProfile;
   const specialPrices = usePricesStore((st) => st.prices);
   const isWholesale = customer?.customerType === 'PROFESSIONNEL' && customer?.professionalStatus === 'APPROVED';
@@ -122,6 +125,7 @@ export default function Checkout() {
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [coords, setCoords] = useState(null);
   const [locating, setLocating] = useState(false);
+  const [mapFocus, setMapFocus] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('MTN_MOMO');
   const [cash, setCash] = useState(null); // éligibilité aux espèces (serveur)
   const payCfg = usePaymentConfig();
@@ -140,7 +144,7 @@ export default function Checkout() {
   const landmarkValue = watch('landmark');
 
   useEffect(() => {
-    if (items.length === 0 && !orderPlacedRef.current) navigate('/panier');
+    if (items.length === 0 && !orderPlacedRef.current) navigate(isDirect ? '/produits' : '/panier');
   }, [items, navigate]);
 
   useEffect(() => {
@@ -179,7 +183,7 @@ export default function Checkout() {
     if (paymentMethod === 'CASH' && cash && !cash.eligible) setPaymentMethod('MTN_MOMO');
   }, [cash, paymentMethod]);
 
-  const subtotalValue = subtotal(customer, specialPrices);
+  const subtotalValue = subtotalOf(items, customer, specialPrices);
   // Livraison : tarif unique, quelle que soit la distance.
   const deliveryFee = FLAT_DELIVERY_FEE;
   const discount = coupon?.discount || 0;
@@ -206,6 +210,7 @@ export default function Checkout() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        setMapFocus((n) => n + 1);
         setLocating(false);
         toast.success('Position GPS enregistrée');
       },
@@ -374,7 +379,8 @@ export default function Checkout() {
         'lastOrder',
         JSON.stringify({ id: order.id, orderNumber: order.orderNumber, phone: order.guestPhone || contactPhone })
       );
-      clear();
+      if (isDirect) clearDirect();
+      else clear();
       // Orange Money : le client valide le paiement sur la page Orange, puis revient sur la confirmation.
       if (paymentUrl) {
         window.location.assign(paymentUrl);
@@ -549,22 +555,31 @@ export default function Checkout() {
                     <input id="instructions" className="input" placeholder="Ex : appelez avant d'arriver" {...register('instructions')} />
                   </div>
 
-                  <div>
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <label className="label !mb-0">Position sur la carte (facultatif)</label>
-                      <button type="button" onClick={useMyLocation} className="btn-secondary !py-1.5 text-xs">
-                        {locating ? <Loader2 size={14} className="animate-spin" /> : <LocateFixed size={14} />}
-                        Utiliser ma position GPS
+                  <div className="rounded-xl2 border border-line bg-mist/50 p-3">
+                    <p className="font-display text-sm font-semibold text-ink">Votre emplacement exact sur la carte</p>
+                    <p className="mt-0.5 text-xs text-ink/55">Partagez votre position GPS, ou touchez la carte pour choisir l'endroit précis (vous pouvez ensuite déplacer le repère).</p>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <button type="button" onClick={useMyLocation} className="btn-secondary w-full !py-2 text-sm">
+                        {locating ? <Loader2 size={15} className="animate-spin" /> : <LocateFixed size={15} />}
+                        Partager ma position GPS
                       </button>
+                      <p className="flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-line px-3 py-2 text-center text-xs text-ink/55">
+                        <MapPin size={13} /> ou touchez un point sur la carte
+                      </p>
                     </div>
-                    <MapView
-                      center={coords ? [coords.latitude, coords.longitude] : YAOUNDE_CENTER}
-                      markers={coords ? [{ position: [coords.latitude, coords.longitude], label: 'Adresse de livraison' }] : []}
-                      onPick={(c) => setCoords(c)}
-                      height={220}
-                    />
-                    <p className="mt-1.5 flex items-center gap-1 text-xs text-ink/45">
-                      <MapPin size={12} /> {coords ? 'Position définie — cliquez à nouveau pour ajuster.' : 'Cliquez sur la carte pour placer votre position, ou utilisez le GPS.'}
+                    <div className="mt-3">
+                      <MapView
+                        center={coords ? [coords.latitude, coords.longitude] : YAOUNDE_CENTER}
+                        markers={coords ? [{ position: [coords.latitude, coords.longitude], label: 'Adresse de livraison' }] : []}
+                        onPick={(c) => setCoords(c)}
+                        draggableMarker
+                        focus={mapFocus}
+                        zoom={coords ? 16 : 13}
+                        height={300}
+                      />
+                    </div>
+                    <p className={`mt-2 flex items-center gap-1.5 text-xs ${coords ? 'font-medium text-brand-700' : 'text-ink/50'}`}>
+                      <MapPin size={12} /> {coords ? 'Emplacement choisi. Touchez ailleurs ou déplacez le repère pour ajuster.' : 'Aucun emplacement choisi pour le moment (facultatif mais conseillé).'}
                     </p>
                   </div>
 

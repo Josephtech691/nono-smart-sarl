@@ -1,0 +1,24 @@
+{
+  "name": "fresh-fish-native-client",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Application Android (Capacitor) des clients Fresh Fish : enveloppe native du site clients.",
+  "scripts": {
+    "prepare-web": "node scripts/prepare-web.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/local-notifications": "^8.0.0",
+    "@capacitor/network": "^8.0.0",
+    "@capacitor/push-notifications": "^8.0.0",
+    "@capacitor/splash-screen": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.0.0",
+    "esbuild": "^0.24.0"
+  }
+}

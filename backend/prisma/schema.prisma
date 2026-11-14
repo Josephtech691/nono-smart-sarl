@@ -1,4 +1,4 @@
-// Schema Prisma - Plateforme e-commerce silures & alevins (NONO SMART SARL)
+// Schema Prisma - Plateforme e-commerce silures & alevins (Fresh Fish)
 // Toutes les sommes d'argent sont stockees en FCFA (entier, pas de centimes).
 // Les quantites (kg, unites) sont stockees en Float pour supporter les poids type 2.5 kg.
 
@@ -123,7 +123,8 @@ model User {
   lastName  String
   phone     String   @unique
   email     String?  @unique
-  password  String
+  password  String?
+  googleId  String?  @unique
   role      Role     @default(CUSTOMER)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -132,8 +133,23 @@ model User {
   customerProfile CustomerProfile?
   driverProfile   DriverProfile?
   notifications   Notification[]
+  deviceTokens    DeviceToken[]
 
   @@map("users")
+}
+
+// Telephones (applications Android) auxquels envoyer les notifications push (Firebase Cloud Messaging).
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  platform  String   @default("android")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("device_tokens")
 }
 
 model CustomerProfile {
@@ -162,6 +178,7 @@ model CustomerProfile {
   reviews         Review[]
   carts           Cart[]
   recurringOrders RecurringOrder[]
+  specialPrices   CustomerProductPrice[]
 
   @@map("customer_profiles")
 }
@@ -223,6 +240,8 @@ model Product {
 
   images         ProductImage[]
   priceTiers     ProductPriceTier[]
+  variants       ProductVariant[]
+  specialPrices  CustomerProductPrice[]
   stockMovements StockMovement[]
   orderItems     OrderItem[]
   favorites      Favorite[]
@@ -242,6 +261,47 @@ model ProductPriceTier {
   unitPrice   Int
 
   @@map("product_price_tiers")
+}
+
+// Variantes d'un produit (ex. silure : 200 g, 300 g ... 1 kg). Chaque variante a son prix par piece, sa photo et
+// son propre stock (en nombre de pieces). Quand un produit a des variantes, le client choisit la quantite de chacune.
+model ProductVariant {
+  id               String   @id @default(uuid())
+  productId        String
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  label            String // ex. "300 g"
+  price            Int // prix d'une piece, en FCFA
+  imageUrl         String?
+  stockQuantity    Float    @default(0)
+  reservedQuantity Float    @default(0)
+  position         Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  orderItems    OrderItem[]
+  specialPrices CustomerProductPrice[]
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+// Prix fixe par l'administration pour UN client et UN produit (ou une variante de produit) : il remplace les
+// paliers degressifs et la remise grossiste, quelle que soit la quantite commandee.
+model CustomerProductPrice {
+  id         String          @id @default(uuid())
+  customerId String
+  customer   CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId  String?
+  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  unitPrice  Int
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([customerId])
+  @@index([productId])
+  @@map("customer_product_prices")
 }
 
 model ProductImage {
@@ -382,6 +442,8 @@ model OrderItem {
   order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId String
   product   Product @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
   name      String
   unitPrice Int
   quantity  Float
@@ -436,8 +498,8 @@ model RecurringOrder {
   items          Json // [{ productId, quantity }]
   addressId      String
   address        Address            @relation(fields: [addressId], references: [id])
-  deliveryZoneId String
-  deliveryZone   DeliveryZone       @relation(fields: [deliveryZoneId], references: [id])
+  deliveryZoneId String?
+  deliveryZone   DeliveryZone?      @relation(fields: [deliveryZoneId], references: [id])
   paymentMethod  PaymentMethod
   frequency      RecurringFrequency
   nextRunAt      DateTime

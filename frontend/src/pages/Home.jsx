@@ -9,7 +9,6 @@ import {
   Wallet,
   Headphones,
   BadgePercent,
-  ArrowRight,
 } from 'lucide-react';
 import { productsApi } from '../api/catalog';
 import ProductCard from '../components/ProductCard';
@@ -49,42 +48,26 @@ export default function Home() {
 
   return (
     <div>
-      {/* HERO */}
+      {/* HERO : bloc compact, la photo est visible en arrière-plan ; les produits suivent directement. */}
       <section className="relative overflow-hidden bg-pine-900">
-        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-16 sm:px-6 md:grid-cols-2 md:items-center md:py-24">
-          <div>
-            <p className="mb-4 inline-block rounded-full bg-white/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wide text-brand-500">
+        <img
+          src="/products/hero-silure.jpg"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-pine-900/90 via-pine-900/65 to-pine-900/25" aria-hidden="true" />
+        <div className="relative mx-auto max-w-7xl px-4 pb-14 pt-8 sm:px-6 md:pb-16 md:pt-12">
+          <div className="max-w-xl">
+            <p className="mb-3 inline-block rounded-full bg-black/30 px-3.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-brand-500 backdrop-blur-sm">
               {COMPANY_SUBTAGLINE}
             </p>
-            <h1 className="font-display text-4xl font-extrabold leading-[1.1] text-white sm:text-5xl">
+            <h1 className="font-display text-3xl font-extrabold leading-[1.1] text-white drop-shadow sm:text-4xl">
               Silures frais &amp; alevins <span className="text-brand-500">livrés chez vous</span>
             </h1>
-            <p className="mt-5 max-w-md text-base text-white/70">
-              Des produits frais, sains et de qualité, livrés partout à Yaoundé. Commandez en
-              quelques clics, payez comme vous le souhaitez.
+            <p className="mt-3 max-w-md text-sm text-white/85 sm:text-base">
+              Des produits frais, sains et de qualité, livrés partout à Yaoundé.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/produits" className="btn-primary">
-                Commander maintenant <ArrowRight size={17} />
-              </Link>
-              <Link to="/produits" className="btn-outline-white">
-                Voir les produits
-              </Link>
-            </div>
-          </div>
-          <div className="relative mx-auto aspect-square w-full max-w-sm md:max-w-md">
-            {/* Ondulations decoratives derriere la vraie photo */}
-            <svg viewBox="0 0 400 400" className="absolute inset-0 h-full w-full">
-              <circle cx="200" cy="200" r="190" fill="white" fillOpacity="0.04" />
-              <circle cx="200" cy="200" r="150" fill="none" stroke="white" strokeOpacity="0.1" />
-              <circle cx="90" cy="110" r="5" fill="#33B56C" fillOpacity="0.5" />
-              <circle cx="320" cy="90" r="3.5" fill="#33B56C" fillOpacity="0.4" />
-              <circle cx="330" cy="290" r="6" fill="#33B56C" fillOpacity="0.35" />
-              <circle cx="70" cy="300" r="4" fill="#33B56C" fillOpacity="0.4" />
-            </svg>
-            <div className="absolute inset-[12%] overflow-hidden rounded-full border-4 border-white/10 shadow-2xl">
-              <img src="/products/hero-silure.jpg" alt="Silures frais Fresh Fish" className="h-full w-full object-cover" />
-            </div>
           </div>
         </div>
 
@@ -95,6 +78,27 @@ export default function Home() {
             d="M0,32 C240,80 480,0 720,24 C960,48 1200,88 1440,40 L1440,90 L0,90 Z"
           />
         </svg>
+      </section>
+
+      {/* PRODUITS POPULAIRES */}
+      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-10">
+        <div className="mb-5 flex items-end justify-between">
+          <h2 className="text-2xl font-bold sm:text-3xl">Nos produits populaires</h2>
+          <Link to="/produits" className="hidden text-sm font-semibold text-brand-700 hover:underline sm:inline">
+            Voir tout le catalogue →
+          </Link>
+        </div>
+        {products === null ? (
+          <Loader />
+        ) : products.length === 0 ? (
+          <p className="text-ink/60">Aucun produit disponible pour le moment.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-4">
+            {products.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        )}
       </section>
 
       {/* BARRE DE CONTACT RAPIDE */}
@@ -124,26 +128,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* PRODUITS POPULAIRES */}
-      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6">
-        <div className="mb-7 flex items-end justify-between">
-          <h2 className="text-2xl font-bold sm:text-3xl">Nos produits populaires</h2>
-          <Link to="/produits" className="hidden text-sm font-semibold text-brand-700 hover:underline sm:inline">
-            Voir tout le catalogue →
-          </Link>
-        </div>
-        {products === null ? (
-          <Loader />
-        ) : products.length === 0 ? (
-          <p className="text-ink/60">Aucun produit disponible pour le moment.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-4">
-            {products.map((p) => (
-              <ProductCard key={p.id} product={p} />
-            ))}
-          </div>
-        )}
-      </section>
 
       {/* POURQUOI NOUS CHOISIR */}
       <section className="bg-mist py-14">

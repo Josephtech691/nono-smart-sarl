@@ -1,29 +1,37 @@
 const prisma = require('../config/db');
 const asyncHandler = require('../utils/asyncHandler');
+const ApiError = require('../utils/ApiError');
 
-// GET /api/notifications (mine, filtrees par audience selon le role)
+// Notifications visibles pour un utilisateur : les siennes et, pour l'administration seulement,
+// celles adressees a tous les administrateurs. Un client ou un livreur ne voit jamais une
+// notification sans destinataire (elle serait celle d'un autre).
+const visibleTo = (user) => (user.role === 'ADMIN' ? [{ userId: user.id }, { audience: 'ADMIN', userId: null }] : [{ userId: user.id }]);
+
+// GET /api/notifications?limit=50 -> { items, unreadCount }
 const listMyNotifications = asyncHandler(async (req, res) => {
-  const audience = req.user.role; // CUSTOMER | ADMIN | DRIVER (memes valeurs que l'enum)
-  const notifications = await prisma.notification.findMany({
-    where: {
-      OR: [{ userId: req.user.id }, { audience, userId: null }],
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-  });
-  res.json(notifications);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+  const where = { OR: visibleTo(req.user) };
+  const [items, unreadCount] = await Promise.all([
+    prisma.notification.findMany({ where, orderBy: { createdAt: 'desc' }, take: limit }),
+    prisma.notification.count({ where: { ...where, isRead: false } }),
+  ]);
+  res.json({ items, unreadCount });
 });
 
 const markRead = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const notification = await prisma.notification.update({ where: { id }, data: { isRead: true } });
-  res.json(notification);
+  // Une notification ne peut etre marquee lue que par son destinataire.
+  const { count } = await prisma.notification.updateMany({
+    where: { id, OR: visibleTo(req.user) },
+    data: { isRead: true },
+  });
+  if (!count) throw new ApiError(404, 'Notification introuvable');
+  res.json({ id, isRead: true });
 });
 
 const markAllRead = asyncHandler(async (req, res) => {
-  const audience = req.user.role;
   await prisma.notification.updateMany({
-    where: { OR: [{ userId: req.user.id }, { audience, userId: null }], isRead: false },
+    where: { OR: visibleTo(req.user), isRead: false },
     data: { isRead: true },
   });
   res.json({ message: 'Notifications marquees comme lues' });

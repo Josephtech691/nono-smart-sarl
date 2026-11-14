@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
-  AlertTriangle, ArrowLeft, BadgeCheck, Ban, Check, FileDown, KeyRound, MapPin, MessageCircle, PackageSearch, Phone, Printer, Sparkles, Undo2,
+  AlertTriangle, ArrowLeft, BadgeCheck, Ban, Check, CheckCircle2, FileDown, KeyRound, MapPin, MessageCircle, PackageSearch, Phone, Printer, Sparkles, Undo2,
 } from 'lucide-react';
 import { ordersApi, downloadInvoice, printInvoice } from '../../api/orders';
 import { driversApi } from '../../api/logistics';
@@ -92,6 +92,62 @@ function CancelModal({ order, onClose, onDone }) {
   );
 }
 
+// Fenêtre « Valider comme livrée » : cas exceptionnel (le livreur n'a pas pu saisir le code du client). L'admin a vu
+// les preuves (vidéo, photo...) ; le motif est obligatoire et conservé dans l'historique de la commande.
+function ForceDeliverModal({ order, onClose, onDone }) {
+  const [reason, setReason] = useState('');
+  const [cash, setCash] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const isCash = order.payment?.method === 'CASH' && order.payment?.status !== 'PAID';
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    if (reason.trim().length < 5) return setError('Indiquez le motif et les preuves vues (5 caractères minimum).');
+    setBusy(true);
+    setError('');
+    try {
+      await ordersApi.forceDeliver(order.id, { reason: reason.trim(), ...(isCash && cash !== '' ? { cashReceived: Number(cash) } : {}) });
+      toast.success('Commande validée comme livrée');
+      onDone();
+    } catch (err) {
+      setError(err.message || 'Validation impossible, réessayez.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} busy={busy} icon={CheckCircle2} title={`Valider ${order.orderNumber} comme livrée ?`}
+      description="À n'utiliser qu'exceptionnellement : le livreur n'a pas pu saisir le code du client et vous avez vérifié ses preuves.">
+      <form onSubmit={submit} className="mt-4 space-y-4">
+        <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
+          <span>Le stock est déduit définitivement et le client est prévenu. Cette action est définitive.</span>
+        </p>
+        <div>
+          <label htmlFor="force-reason" className="label">Motif et preuves vues (obligatoire)</label>
+          <textarea id="force-reason" rows={3} className="input resize-none" maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="Ex : client absent de son téléphone, vidéo de remise de la commande vue le 14/11 à 12h30" />
+        </div>
+        {isCash && (
+          <div>
+            <label htmlFor="force-cash" className="label">Espèces encaissées par le livreur (FCFA, facultatif)</label>
+            <input id="force-cash" type="number" inputMode="numeric" min="0" className="input" value={cash} onChange={(e) => setCash(e.target.value)} placeholder={`Montant attendu : ${order.total}`} />
+            <p className="mt-1 text-xs text-ink/50">Laissez vide si le paiement n'est pas encore reçu : il restera « à régler ».</p>
+          </div>
+        )}
+        {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <div className="grid grid-cols-2 gap-3">
+          <button type="button" onClick={onClose} disabled={busy} className="btn-secondary !py-3">Retour</button>
+          <button type="submit" disabled={busy} className="btn-primary !py-3">{busy ? 'Validation…' : 'Valider la livraison'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function AdminOrderDetail() {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
@@ -102,6 +158,7 @@ export default function AdminOrderDetail() {
   const [driverChoice, setDriverChoice] = useState('');
   const [busy, setBusy] = useState(false);
   const [payModal, setPayModal] = useState(null); // 'paid' | 'refund'
+  const [forceOpen, setForceOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
 
   usePageMeta(order ? `Commande ${order.orderNumber}` : 'Commande');
@@ -324,6 +381,14 @@ export default function AdminOrderDetail() {
               <p className="text-sm text-ink/50">{order.status === 'DELIVERED' ? 'Commande livrée : plus aucun changement possible.' : 'Commande annulée : plus aucun changement possible.'}</p>
             ) : (
               <>
+                {['ASSIGNED', 'PICKED_UP', 'ON_DELIVERY'].includes(order.status) && order.delivery && (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl2 border border-dashed border-amber-300 bg-amber-50/60 p-3">
+                    <p className="min-w-0 flex-1 text-sm text-amber-900">Le livreur n'a pas pu saisir le code du client ? Après vérification de ses preuves, vous pouvez valider la livraison.</p>
+                    <button type="button" onClick={() => setForceOpen(true)} className="btn-secondary !border-amber-600 !px-4 !py-2 text-sm !text-amber-900 hover:!bg-amber-100">
+                      <CheckCircle2 size={16} /> Valider comme livrée
+                    </button>
+                  </div>
+                )}
                 <div className="mt-3 grid gap-4 sm:grid-cols-2">
                   <div>
                     <label htmlFor="status-choice" className="label">Statut</label>
@@ -486,6 +551,16 @@ export default function AdminOrderDetail() {
           load();
         }}
       />
+      {forceOpen && (
+        <ForceDeliverModal
+          order={order}
+          onClose={() => setForceOpen(false)}
+          onDone={() => {
+            setForceOpen(false);
+            load();
+          }}
+        />
+      )}
       {cancelOpen && (
         <CancelModal
           order={order}

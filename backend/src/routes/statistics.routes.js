@@ -12,5 +12,6 @@ router.get('/top-customers', ctrl.topCustomers);
 router.get('/driver-performance', ctrl.driverPerformance);
 router.get('/stock-forecast', ctrl.stockForecast);
 router.get('/anomalies', ctrl.anomalies);
+router.get('/payment-breakdown', ctrl.paymentBreakdown);
 
 module.exports = router;

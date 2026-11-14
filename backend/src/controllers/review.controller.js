@@ -51,4 +51,17 @@ const moderateReview = asyncHandler(async (req, res) => {
   res.json(review);
 });
 
-module.exports = { createReview, listReviews, moderateReview };
+// GET /api/reviews/mine (client) - "Mes avis" : les avis que j'ai laisses, avec la commande concernee
+const myReviews = asyncHandler(async (req, res) => {
+  const reviews = await prisma.review.findMany({
+    where: { customerId: req.customerProfile.id },
+    include: {
+      order: { select: { id: true, orderNumber: true } },
+      product: { select: { name: true, slug: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  res.json(reviews);
+});
+
+module.exports = { createReview, listReviews, moderateReview, myReviews };

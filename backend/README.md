@@ -1,4 +1,4 @@
-# NONO SMART SARL — API backend
+# Fresh Fish — API backend
 
 API REST pour la plateforme de vente de silures frais et d'alevins avec livraison
 à Yaoundé. Node.js + Express + Prisma + PostgreSQL, conforme au cahier des
@@ -44,22 +44,20 @@ L'API écoute sur `http://localhost:4000`. Vérifiez avec `GET /api/health`.
 
 | Rôle    | Téléphone   | Email                    |
 |---------|-------------|--------------------------|
-| Admin   | 659103000   | admin@nonosmart.cm       |
-| Livreur | 674331099   | jean.livreur@nonosmart.cm|
+| Admin   | 659103000   | admin@freshfish.cm       |
+| Livreur | 674331099   | jean.livreur@freshfish.cm|
 | Client  | 690000000   | client@demo.cm           |
 
 **À changer immédiatement en production** — ce sont des identifiants de démonstration.
 
 ## 2. Déploiement sur Render
 
-> ⚠️ **Étape obligatoire avant que le site fonctionne : générer la migration
-> initiale.** `npx prisma migrate deploy` (utilisé au build par Render)
-> **applique** des migrations existantes, il n'en **génère** jamais. Comme
-> aucune migration n'est fournie dans ce dépôt (elle doit être générée contre
-> une vraie base de données, ce qui n'est possible qu'une fois connecté à
-> votre Postgres), la première fois vous obtiendrez une base vide et des
-> erreurs `The table 'public.products' does not exist`. Voir l'étape 3
-> ci-dessous immédiatement après avoir créé le service.
+> ℹ️ **Migrations fournies.** Le dossier `prisma/migrations/` contient déjà la
+> migration initiale (`20260810120000_init`) et celle de la connexion Google
+> (`20260827000000_google_oauth`). `npx prisma migrate deploy`, lancé au build
+> par Render, les applique : la base est créée toute seule au premier
+> déploiement. Il ne reste qu'à la remplir une fois (`npm run seed`, voir
+> l'étape 3).
 
 Deux options pour déployer :
 
@@ -70,7 +68,7 @@ Deux options pour déployer :
    `backend/render.yaml` et crée automatiquement le service web et la base Postgres.
 3. Render vous demandera de renseigner les variables marquées `sync: false`
    (`FRONTEND_URL`, clés MTN/Orange) — `FRONTEND_URL` doit être l'URL Vercel du frontend
-   **exacte**, sans slash final (ex : `https://nono-smart-sarl.vercel.app`).
+   **exacte**, sans slash final (ex : `https://fresh-fish-sarl.vercel.app`).
 4. `JWT_SECRET` est généré automatiquement par Render.
 
 ### Option B — Manuelle
@@ -82,34 +80,33 @@ Deux options pour déployer :
 5. Ajoutez les variables d'environnement de `.env.example` (au minimum
    `DATABASE_URL`, `JWT_SECRET`, `NODE_ENV=production`, `FRONTEND_URL`).
 
-### 3. Générer la migration initiale (obligatoire, une seule fois)
+### 3. Remplir la base (une seule fois)
 
-Une fois le service Render créé (peu importe l'option A ou B), sur **votre
-ordinateur**, dans le dossier `backend` :
+Après le premier déploiement réussi, ouvrez le **Shell** du service
+(dashboard Render > votre service > onglet **Shell**) et lancez :
 
 ```bash
-# Recuperez l'URL externe depuis Render : dashboard > votre base Postgres >
-# Connections > "External Database URL" (pas l'Internal, qui n'est joignable
-# que depuis l'interieur du reseau Render)
-echo "DATABASE_URL=postgresql://...url-externe-copiee-depuis-render..." > .env
-
-npm install
-npx prisma migrate dev --name init   # cree ET applique les tables sur la vraie base
-npm run seed                          # peuple categories/produits/zones/comptes demo
+npm run seed            # catégories, produits, zones, comptes de démonstration
 ```
 
-`prisma migrate dev` génère le dossier `prisma/migrations/` — **committez-le et
-poussez-le** sur GitHub. Les déploiements suivants (et tout changement futur du
-schéma) s'appliqueront ensuite automatiquement via `prisma migrate deploy` au
-build, sans repasser par cette étape manuelle.
+Ou, depuis votre ordinateur, avec l'URL **externe** de la base (dashboard >
+votre base Postgres > Connections > « External Database URL ») dans `.env` :
 
-**Vous n'avez pas Node.js en local ?** Alternative plus rapide (mais qui ne
-crée pas d'historique de migration propre, à réserver au déblocage
-d'urgence) : dashboard Render > votre service > onglet **Shell**, puis :
 ```bash
-npx prisma db push
+npm install
+npx prisma migrate deploy
 npm run seed
 ```
+
+- `npm run seed` **repart de zéro** (efface puis recrée les données de
+  démonstration) : à ne lancer que sur une base neuve.
+- `npm run seed:catalog` **n'efface rien** : il ajoute seulement les variantes
+  de silure qui manquent (entier, nettoyé, découpé, gros, moyen, fumé) et
+  ignore celles qui existent déjà. On peut le relancer sans risque, même sur
+  une base de production déjà remplie.
+- Quand vous modifiez `prisma/schema.prisma`, générez une nouvelle migration
+  avec `npx prisma migrate dev --name <description>` et committez le dossier
+  `prisma/migrations/` : le déploiement suivant l'appliquera automatiquement.
 
 > ⚠️ **Base Postgres gratuite Render** : elle expire automatiquement 30 jours après
 > sa création (14 jours de grâce ensuite avant suppression définitive). Pratique
@@ -126,7 +123,7 @@ ne correspond pas exactement à l'origine du frontend :
 
 1. Dashboard Render > votre service > **Environment** > vérifiez `FRONTEND_URL`.
 2. Elle doit être **identique** à l'URL affichée dans l'erreur du navigateur
-   (ex : `https://nono-smart-sarl.vercel.app`), sans slash final. Un slash
+   (ex : `https://fresh-fish-sarl.vercel.app`), sans slash final. Un slash
    final ou un `www.` en trop suffit à faire échouer la comparaison.
 3. Plusieurs origines (ex: domaine personnalisé + sous-domaine Vercel) :
    séparez-les par une virgule, sans espace : `FRONTEND_URL=https://a.com,https://b.vercel.app`
@@ -173,11 +170,87 @@ Ces trois intégrations suivent le même principe honnête : l'architecture est 
 - SMS (ex. Africa's Talking, Twilio) : voir `src/integrations/sms.js`
 - WhatsApp Business Cloud API (Meta) : voir `src/integrations/whatsapp.js`
 
-En attendant, chaque intégration journalise/simule un envoi réussi, ce qui permet de tester tout le tunnel de bout en bout. Une route `POST /api/payments/:orderId/simulate` (désactivée si `NODE_ENV=production`) permet à un admin de forcer la confirmation d'un paiement en local pendant les tests.
+Les paiements Mobile Money sont **réellement codés** (`src/integrations/mtnMomo.js`, `orangeMoney.js`, `src/services/payment.service.js`) :
+
+| Environnement | Comportement |
+|---|---|
+| `NODE_ENV=production` | Vraies API MTN MoMo / Orange Money. **Aucune simulation.** Si une clé manque, le paiement affiche « Erreur de développement : … clés manquantes : … » (et le site bloque la commande Mobile Money). La route `/api/payments/:id/simulate` répond 404. |
+| autre (développement) | Si les clés sont absentes, un **simulateur** remplace l'opérateur ; la page de confirmation propose « Simuler un paiement réussi / un échec ». |
+
+À renseigner dans les variables d'environnement de l'hébergeur (voir `.env.example`) : `API_PUBLIC_URL`, `CLIENT_URL`, `MTN_MOMO_API_URL`, `MTN_MOMO_API_USER`, `MTN_MOMO_API_KEY`, `MTN_MOMO_SUBSCRIPTION_KEY`, `MTN_MOMO_TARGET_ENVIRONMENT`, `ORANGE_MONEY_API_URL`, `ORANGE_MONEY_API_KEY`, `ORANGE_MONEY_API_SECRET`, `ORANGE_MONEY_MERCHANT_KEY`. `GET /api/payments/config` indique l'environnement et les clés manquantes ; le rapport est aussi écrit dans les logs au démarrage.
+
+- **MTN MoMo** : demande de paiement (RequestToPay) → validation par code PIN sur le téléphone → statut vérifié auprès de MTN (interrogation à chaque sondage de la page + callback `POST /api/payments/webhook/mtn`).
+- **Orange Money** : l'API renvoie une page de paiement, le client y est redirigé puis revient sur `/commande-confirmee/:id` ; statut confirmé par `transactionstatus` et notification `POST /api/payments/webhook/orange/:orderId` (jeton `notif_token` vérifié).
+- Une notification d'opérateur n'est jamais crue sur parole : le statut est toujours re-vérifié auprès de l'opérateur. Les confirmations sont idempotentes.
+- **Espèces** : réservées aux clients **avec compte** ayant déjà **payé plus de 2 commandes** (donc 3 et plus) via MTN/Orange — règle appliquée côté serveur (`src/services/cash.service.js`) ; `GET /api/orders/cash-eligibility` renseigne l'écran de paiement.
 
 ## 6. Ce qui reste hors périmètre (section 77 "fonctionnalités futures", au-delà de la Phase 3)
 
 Applications Android/iOS natives, PWA avancée (le manifeste + service worker de base sont fournis côté frontend), multi-villes/multi-entreprises/marketplace, chatbot. Ces éléments impliquent soit une plateforme différente (apps natives), soit une refonte architecturale majeure (multi-tenant), et n'étaient pas listés dans les Phases 2/3 explicitement demandées.
+
+## 7. Connexion Google (« Continuer avec Google »)
+
+1. Sur <https://console.cloud.google.com/apis/credentials>, créez un **ID client
+   OAuth** de type **Application Web**.
+2. Dans **Origines JavaScript autorisées**, ajoutez l'adresse exacte du site
+   (ex. `https://fresh-fish-sarl.vercel.app`, et `http://localhost:5173` pour
+   le développement). Aucune URI de redirection n'est nécessaire.
+3. Copiez l'ID client dans `GOOGLE_CLIENT_ID` (backend) **et** dans
+   `VITE_GOOGLE_CLIENT_ID` (frontend, même valeur).
+
+Si `GOOGLE_CLIENT_ID` est vide, le bouton est simplement masqué : le reste du
+site fonctionne normalement. Un client qui s'inscrit avec Google n'a pas encore
+de numéro de téléphone : il lui est demandé au moment de la commande (et rappelé sur son espace client).
+
+## 8. Mots de passe oubliés et réinitialisation par l'administrateur
+
+- **Page « Mot de passe oublié »** : envoie un code à 6 chiffres par SMS. Tant
+  qu'aucun fournisseur SMS n'est branché (`src/integrations/sms.js`), le code
+  n'est **pas** réellement envoyé : il apparaît dans les journaux du serveur
+  (`[sms:simule] -> ...`) et la page propose au client de vous écrire sur
+  WhatsApp.
+- **Réinitialisation par l'administrateur** (la solution à utiliser tant que
+  le SMS n'est pas branché) : *Admin > Clients* ou *Admin > Livreurs*, bouton
+  **Mot de passe** → un mot de passe provisoire est créé et affiché **une seule
+  fois**, avec un bouton « Envoyer par WhatsApp ». La personne le change
+  ensuite depuis son profil. Un client inscrit uniquement avec Google n'a pas
+  de mot de passe à réinitialiser (le serveur répond 400 dans ce cas).
+- **Création d'un livreur** (*Admin > Livreurs > Ajouter un livreur*) : le
+  téléphone sert d'identifiant ; le mot de passe provisoire choisi (ou généré)
+  s'affiche une fois, avec le message WhatsApp prêt à envoyer.
+
+## 9. Endpoints utilisés par le back-office
+
+| Besoin | Endpoint |
+|---|---|
+| Liste des commandes (onglets, compteurs, recherche, dates) | `GET /api/orders` (`group`, `status`, `payment`, `paymentStatus`, `zone`, `search`, `from`, `to`, `page`, `limit`) |
+| Export CSV des commandes | `GET /api/orders/export.csv` (mêmes filtres) |
+| Statut, annulation, livreur | `PATCH /api/orders/:id/status`, `POST /api/orders/:id/cancel`, `POST /api/orders/:id/assign-driver`, `POST /api/orders/:id/auto-assign-driver` |
+| Facture PDF | `GET /api/orders/:id/invoice.pdf` |
+| Paiements | `GET /api/payments`, `POST /api/payments/:orderId/mark-paid`, `POST /api/payments/:orderId/mark-refunded` |
+| Livreurs | `GET/POST /api/drivers`, `PATCH /api/drivers/:id`, `POST /api/drivers/:id/reset-password`, `GET /api/drivers/deliveries` |
+| Clients | `GET /api/customers`, `PATCH /api/customers/:id/professional-status`, `POST /api/customers/:id/reset-password` |
+| Stock | `PATCH /api/products/:id/stock` (`quantity` positive ou négative, `reason` facultatif ; refusé si le stock deviendrait négatif) |
+| Notifications | `GET /api/notifications`, `PATCH /api/notifications/:id/read`, `POST /api/notifications/read-all` |
+| Statistiques | `GET /api/statistics/dashboard`, `/sales`, `/products`, `/payment-breakdown` |
+
+Règles à connaître :
+
+- **Mobile Money** : « Marquer payé » enregistre le paiement **et** passe la
+  commande de « En attente » à « Confirmée ». Pour les **espèces**, il
+  enregistre seulement l'encaissement (la commande suit son cours normal).
+- **Remboursements** : « Marquer remboursé » ne fait que **noter** qu'un
+  remboursement a été effectué (commande annulée et déjà payée). Le
+  remboursement lui-même (renvoi de l'argent au client par MoMo / Orange Money)
+  se fait à la main, hors de la plateforme.
+- **Livreur** : on ne peut assigner qu'un livreur actif (ni suspendu, ni compte
+  désactivé). Passer une commande à « Prête » assigne automatiquement le
+  livreur disponible le moins chargé ; s'il n'y en a aucun, la commande reste
+  « Prête » et vous l'assignez à la main. Une livraison signalée « non livrée »
+  par le livreur peut être relancée (même livreur ou un autre).
+- **Dates et statistiques** sont calculées à l'heure de **Douala (UTC+1)**.
+  Les filtres de dates `du` / `au` incluent le jour de fin.
+- **Remise grossiste** d'un compte professionnel : entier de 0 à 50 %.
 
 ## Structure
 

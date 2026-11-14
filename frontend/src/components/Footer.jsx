@@ -69,6 +69,7 @@ export default function Footer() {
         <p className="mt-2 flex flex-wrap justify-center gap-x-5 gap-y-1">
           <Link to="/conditions-generales" className="hover:text-white">Conditions générales</Link>
           <Link to="/confidentialite" className="hover:text-white">Politique de confidentialité</Link>
+          <Link to="/suppression-compte" className="hover:text-white">Supprimer mon compte</Link>
         </p>
       </div>
     </footer>
