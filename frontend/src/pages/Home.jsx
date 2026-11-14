@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Phone,
-  MessageCircle,
-  MapPin,
-  Truck,
-  ShieldCheck,
-  Wallet,
-  Headphones,
-  BadgePercent,
-} from 'lucide-react';
+    Phone,
+      MessageCircle,
+        MapPin,
+          Truck,
+            ShieldCheck,
+              Wallet,
+                Headphones,
+                  BadgePercent,
+                    ArrowRight,
+                    } from 'lucide-react';
 import { productsApi } from '../api/catalog';
 import ProductCard from '../components/ProductCard';
 import Loader from '../components/Loader';
